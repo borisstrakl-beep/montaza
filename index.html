@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M SORA — Obračun montaže</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green-dark: #1a3d2e;
+    --green-mid: #1e6a4a;
+    --green-light: #e8f3ee;
+    --red: #C8102E;
+    --bg: #f5f7f5;
+    --card: #ffffff;
+    --border: #dde7e2;
+    --text: #1a1a1a;
+    --muted: #667;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .app-header {
+    background: var(--green-dark);
+    color: #fff;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .app-header img { height: 38px; }
+  .app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+  .app-header .version { font-family: 'DM Mono', monospace; font-size: 11px; opacity: 0.6; margin-left: auto; }
+
+  /* ── MAIN LAYOUT ── */
+  .app-main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 14px 20px;
+    background: var(--green-light);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    color: var(--green-dark);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-body { padding: 20px; }
+
+  /* ── FORM ELEMENTS ── */
+  label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  input[type="text"], input[type="password"], input[type="number"], select, textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    color: var(--text);
+    background: #fff;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--green-mid);
+    box-shadow: 0 0 0 3px rgba(30,106,74,0.08);
+  }
+  .form-row { display: grid; gap: 14px; }
+  .form-row.cols-2 { grid-template-columns: 1fr 1fr; }
+  .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-group { display: flex; flex-direction: column; }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--green-mid);
+    background: var(--green-light);
+  }
+  .upload-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-zone .icon { font-size: 32px; margin-bottom: 10px; }
+  .upload-zone p { color: var(--muted); font-size: 13px; }
+  .upload-zone .filename {
+    font-weight: 600; color: var(--green-dark);
+    font-family: 'DM Mono', monospace; font-size: 12px; margin-top: 6px;
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 7px; border: none;
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--green-dark); color: #fff; }
+  .btn-primary:hover { background: #122b1f; }
+  .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+  .btn-secondary { background: var(--green-light); color: var(--green-dark); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #d4e9df; }
+  .btn-danger { background: #fff0f0; color: var(--red); border: 1px solid #f5c6c6; }
+  .btn-danger:hover { background: #ffe0e0; }
+  .btn-lg { padding: 13px 28px; font-size: 15px; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ── STATUS / PROGRESS ── */
+  .status-box {
+    padding: 14px 16px; border-radius: 8px; font-size: 13px;
+    display: flex; align-items: flex-start; gap: 10px;
+    line-height: 1.5;
+  }
+  .status-box.info { background: #e8f3ee; color: var(--green-dark); border: 1px solid #b8d9c8; }
+  .status-box.error { background: #fff0f0; color: #8b0000; border: 1px solid #f5c6c6; }
+  .status-box.warning { background: #fff8e5; color: #7a5500; border: 1px solid #f0d080; }
+  .status-box.success { background: #e8f3ee; color: var(--green-dark); border: 1px solid var(--green-mid); font-weight: 600; }
+
+  .progress-bar {
+    height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 10px;
+  }
+  .progress-bar-fill {
+    height: 100%; background: var(--green-mid); border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+
+  /* ── EXTRACTED DATA PREVIEW ── */
+  .data-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;
+    margin-bottom: 16px;
+  }
+  .data-item {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;
+  }
+  .data-item .di-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+  .data-item .di-value { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; color: var(--green-dark); }
+  .data-item .di-value.unset { color: #aaa; font-weight: 400; font-style: italic; }
+
+  /* ── OUTPUT ── */
+  .output-frame {
+    width: 100%; height: 600px; border: 1px solid var(--border); border-radius: 8px;
+    background: #fff;
+  }
+
+  /* ── API KEY SECTION ── */
+  .api-key-row { display: flex; gap: 10px; align-items: flex-end; }
+  .api-key-row .form-group { flex: 1; }
+  .api-status { font-size: 12px; margin-top: 4px; }
+  .api-status.ok { color: var(--green-mid); }
+  .api-status.err { color: var(--red); }
+
+  /* ── DISTANCE SECTION ── */
+  .km-manual { display: flex; gap: 10px; align-items: flex-end; }
+  .km-manual .form-group { flex: 1; }
+
+  /* ── SPINNER ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  .spinner.dark {
+    border-color: rgba(30,106,74,0.2); border-top-color: var(--green-mid);
+  }
+
+  /* ── COLLAPSIBLE ── */
+  details summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--green-dark); padding: 4px 0; }
+  details summary::-webkit-details-marker { color: var(--green-mid); }
+
+  /* ── HIDE ── */
+  .hidden { display: none !important; }
+
+  /* ── STEP INDICATOR ── */
+  .steps { display: flex; gap: 0; margin-bottom: 4px; }
+  .step {
+    flex: 1; text-align: center; padding: 8px 4px;
+    font-size: 11.5px; font-weight: 600; color: #aaa;
+    border-bottom: 2px solid var(--border);
+    transition: all 0.2s;
+  }
+  .step.active { color: var(--green-dark); border-bottom-color: var(--green-mid); }
+  .step.done { color: var(--green-mid); border-bottom-color: var(--green-mid); }
+
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+
+<div id="file-protocol-warning" class="no-print" style="display:none;background:#fff4e5;border-bottom:2px solid #f0c36d;padding:14px 24px;">
+  <div style="max-width:860px;margin:0 auto;display:flex;gap:12px;align-items:flex-start;font-size:13px;color:#7a5500;line-height:1.6;">
+    <span style="font-size:20px;">⚠️</span>
+    <div>
+      <strong>Aplikacija je odprta direktno iz datoteke (file://) — API klici ne bodo delovali!</strong><br>
+      Brskalnik iz varnostnih razlogov blokira povezave na internet, ko je stran odprta na ta način (vidi se "Failed to fetch").
+      <br><br>
+      <strong>Rešitev — uporabi eno od teh možnosti:</strong>
+      <ol style="margin:8px 0 0 20px;display:flex;flex-direction:column;gap:4px;">
+        <li><strong>Najlažje:</strong> v brskalniku Chrome pojdi na <code>chrome://extensions</code>, vklopi "Razvijalski način" ni potrebno — namesto tega <strong>povleci to HTML datoteko v nov zavihek</strong> in preveri ali naslov začne z <code>file://</code>. Če da, glej spodnjo možnost.</li>
+        <li><strong>Priporočeno:</strong> prosi Borisa, naj ti pošlje povezavo do aplikacije gostovane na spletu (npr. GitHub Pages ali podoben brezplačen gostujoč strežnik) namesto same datoteke.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+  if (location.protocol === 'file:') {
+    document.getElementById('file-protocol-warning').style.display = 'block';
+  }
+</script>
+
+<header class="app-header no-print">
+  <img src="data:image/jpeg;base64,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" alt="M SORA">
+  <h1>Obračun montaže</h1>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+    <span id="api-indicator" style="font-family:'DM Mono',monospace;font-size:11px;opacity:0.75;">⬤ ključ ni nastavljen</span>
+    <button onclick="toggleApiPanel()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 12px;border-radius:5px;cursor:pointer;">⚙️ Nastavitve</button>
+  </div>
+</header>
+
+<!-- API PANEL -->
+<div id="api-panel" class="no-print" style="display:none;background:#f0f5f2;border-bottom:2px solid var(--border);">
+  <div style="max-width:860px;margin:0 auto;padding:16px 24px;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;gap:10px;align-items:flex-end;">
+      <div style="flex:1;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">Anthropic API ključ</label>
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off"
+          style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13.5px;font-family:'DM Sans',sans-serif;">
+      </div>
+      <button class="btn btn-primary" onclick="saveApiKey()">Shrani</button>
+      <button class="btn btn-secondary" onclick="toggleApiPanel()">Zapri</button>
+    </div>
+    <div id="api-status" style="font-size:12px;"></div>
+    <details>
+      <summary style="font-size:12.5px;font-weight:600;color:var(--green-dark);cursor:pointer;">📋 Kako pridem do API ključa?</summary>
+      <div style="margin-top:10px;padding:12px;background:#fff;border-radius:8px;font-size:12.5px;line-height:1.8;">
+        <ol style="margin-left:18px;display:flex;flex-direction:column;gap:6px;">
+          <li>Odpri <a href="https://console.anthropic.com" target="_blank" style="color:var(--green-mid);font-weight:600;">console.anthropic.com</a>.</li>
+          <li>Če nimaš računa: klikni <strong>Sign Up</strong>, vnesi e-mail in geslo, potrdi e-mail.</li>
+          <li>V levem meniju klikni <strong>API Keys</strong> → <strong>Create Key</strong>.</li>
+          <li>Vnesi ime (npr. <em>MSORA Obračun</em>), potrdi. Ključ se prikaže <strong>samo enkrat</strong> — ga takoj skopiraj.</li>
+          <li>Prilepi ključ v polje zgoraj in klikni <strong>Shrani</strong>.</li>
+          <li>V levem meniju klikni <strong>Billing</strong> → <strong>Credits kaufen</strong> → dodaj vsaj <strong>10 $</strong> (~250 obračunov).</li>
+        </ol>
+        <div style="margin-top:10px;padding:8px 12px;background:#fff8e5;border:1px solid #f0d080;border-radius:6px;font-size:11.5px;color:#7a5500;">
+          ⚠️ Ključ se shrani samo lokalno v tem brskalniku. En skupen ključ za vse uporabnike M SORA je v redu (~0,04 EUR/obračun).
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<main class="app-main no-print">
+
+  <!-- KORAKI -->
+  <div class="steps">
+    <div class="step active" id="step-1">1 · Naloži PDF</div>
+    <div class="step" id="step-2">2 · Razdalja</div>
+    <div class="step" id="step-3">3 · Pregled podatkov</div>
+    <div class="step" id="step-4">4 · Obračun</div>
+  </div>
+
+  <!-- KORAK 1: UPLOAD PDF -->
+  <div class="card" id="card-upload">
+    <div class="card-header">📄 &nbsp;1 · Naloži ponudbo M SORA (PDF)</div>
+    <div class="card-body">
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="pdf-input" accept=".pdf" onchange="handlePdfUpload(event)">
+        <div class="icon">📑</div>
+        <p>Povleci PDF sem ali klikni za izbiro</p>
+        <div class="filename hidden" id="pdf-filename"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KORAK 2: RAZDALJA -->
+  <div class="card hidden" id="card-distance">
+    <div class="card-header">📍 &nbsp;2 · Razdalja Žiri → objekt</div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:14px;">
+
+      <div id="auto-distance-block">
+        <div class="status-box info" id="distance-search-status">
+          <div class="spinner dark"></div>
+          <div>Iščem lokacijo objekta iz PDF...</div>
+        </div>
+      </div>
+
+      <div id="google-maps-block" class="hidden">
+        <p style="font-size:13px;margin-bottom:8px;color:var(--muted);">
+          Predlagana pot po Google Zemljevidih (odpre se v novem zavihku za preverbo):
+        </p>
+        <a id="gmaps-link" href="#" target="_blank" class="btn btn-secondary" style="display:inline-flex;">
+          🗺️ &nbsp;Odpri Google Zemljevide
+        </a>
+        <p style="font-size:11.5px;color:var(--muted);margin-top:6px;">
+          Preverite razdaljo in jo vnesite spodaj.
+        </p>
+      </div>
+
+      <div>
+        <label>Razdalja Žiri → objekt (enosmerno, km) <span style="color:var(--red)">*</span></label>
+        <div class="km-manual">
+          <div class="form-group">
+            <input type="number" id="km-input" step="0.01" min="1" max="500" placeholder="npr. 45.51">
+          </div>
+          <button class="btn btn-primary" onclick="confirmDistance()">Potrdi razdaljo →</button>
+        </div>
+        <p style="font-size:11.5px;color:var(--muted);margin-top:5px;">
+          Formula: km × 2 smeri × 0,43 EUR/km = kilometrina monterju
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- KORAK 3: PREGLED IZVLEČENIH PODATKOV -->
+  <div class="card hidden" id="card-preview">
+    <div class="card-header">🔍 &nbsp;3 · Pregled izvlečenih podatkov</div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+      <div class="status-box info hidden" id="extract-status">
+        <div class="spinner dark"></div>
+        <div id="extract-status-text">Ekstrahiram podatke iz PDF...</div>
+      </div>
+
+      <div id="preview-data" class="hidden">
+        <div class="data-grid" id="data-grid"></div>
+
+        <details open>
+          <summary>Pozicije oken / elementov</summary>
+          <div style="margin-top:10px;overflow-x:auto;">
+            <table id="positions-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:var(--green-light);">
+                  <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);">Poz.</th>
+                  <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);">Lokacija</th>
+                  <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);">Element</th>
+                  <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);">Tip</th>
+                  <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Š (mm)</th>
+                  <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">V (mm)</th>
+                  <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Obseg (tm)</th>
+                  <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Žaluzija (m)</th>
+                  <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Komarniki</th>
+                </tr>
+              </thead>
+              <tbody id="positions-tbody"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <div class="status-box warning hidden" id="preview-warnings"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="generateBilling()">Generiraj obračun →</button>
+          <button class="btn btn-secondary" onclick="resetAll()">↩ Začni znova</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- KORAK 4: OBRAČUN -->
+  <div class="card hidden" id="card-output">
+    <div class="card-header">📋 &nbsp;4 · Obračun montaže</div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:14px;">
+
+      <div class="status-box info hidden" id="generate-status">
+        <div class="spinner dark"></div>
+        <div>Generiram HTML obračun...</div>
+      </div>
+
+      <div id="output-ready" class="hidden">
+        <div class="status-box success" style="margin-bottom:14px;">
+          ✅ &nbsp;Obračun je pripravljen. Izberite vrsto izpisa.
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+
+          <!-- KOMPLET -->
+          <div style="border:2px solid var(--green-dark);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+            <div style="font-weight:700;font-size:14px;color:var(--green-dark);">📄 Izpis M SORA — komplet</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5;">
+              Stran 1 (montažni obračun po ponudbi) + Stran 2 (alternativni obračun po tm). Vsi zneski — za interno uporabo.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;">
+              <button class="btn btn-primary" onclick="printOutput('komplet')">🖨️ Natisni</button>
+              <button class="btn btn-secondary" onclick="downloadHtml('komplet')">⬇️ Prenesi HTML</button>
+            </div>
+          </div>
+
+          <!-- MONTER -->
+          <div style="border:2px solid var(--green-mid);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+            <div style="font-weight:700;font-size:14px;color:var(--green-mid);">👷 Izpis za monterja</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5;">
+              Samo obračun po tm (stran 2). Zneski × 65 %. Kilometrina ostane 100 %. Datoteka: <em>N26xxx — obračun za monterja</em>.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;">
+              <button class="btn btn-secondary" style="border-color:var(--green-mid);color:var(--green-mid);" onclick="printOutput('monter')">🖨️ Natisni</button>
+              <button class="btn btn-secondary" style="border-color:var(--green-mid);color:var(--green-mid);" onclick="downloadHtml('monter')">⬇️ Prenesi HTML</button>
+            </div>
+          </div>
+
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <button class="btn btn-secondary" onclick="resetAll()">↩ Nov obračun</button>
+        </div>
+
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Predogled — komplet:</p>
+        <iframe id="output-frame" class="output-frame"></iframe>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- HIDDEN: output HTML storage -->
+<div id="output-html-store" class="hidden"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────
+// KONSTANTE
+// ─────────────────────────────────────────────────────────
+const LOGO_B64 = `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`;
+const KM_RATE = 0.43;
+const ZIRI_COORDS = { lat: 46.0468, lng: 14.1072 };
+
+// ─────────────────────────────────────────────────────────
+// STANJE APLIKACIJE
+// ─────────────────────────────────────────────────────────
+let state = {
+  pdfBase64: null,
+  pdfName: null,
+  kmEnosmerno: null,
+  extracted: null,   // JSON iz Claude
+  outputHtml: null,
+  stran2data: null,  // podatki za monterjev izpis
+};
+
+// ─────────────────────────────────────────────────────────
+// API KLJUČ
+// ─────────────────────────────────────────────────────────
+function updateApiIndicator() {
+  const key = localStorage.getItem('msora_api_key');
+  const el = document.getElementById('api-indicator');
+  if (el) {
+    if (key) {
+      el.textContent = '⬤ API ključ aktiven';
+      el.style.color = '#7ed9a8';
+    } else {
+      el.textContent = '⬤ ključ ni nastavljen';
+      el.style.color = '#ffaa55';
+    }
+  }
+}
+
+function toggleApiPanel() {
+  const panel = document.getElementById('api-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function updateApiIndicator() {
+  const key = localStorage.getItem('msora_api_key');
+  const el = document.getElementById('api-indicator');
+  if (!el) return;
+  if (key) { el.textContent = '⬤ API ključ aktiven'; el.style.color = '#7ed9a8'; }
+  else      { el.textContent = '⬤ ključ ni nastavljen'; el.style.color = '#ffaa55'; }
+}
+
+function toggleApiPanel() {
+  const p = document.getElementById('api-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('msora_api_key');
+  if (saved) {
+    document.getElementById('api-key-input').value = saved;
+    document.getElementById('api-status').textContent = '✓ Ključ je aktiven.';
+    document.getElementById('api-status').style.color = 'var(--green-mid)';
+  }
+  updateApiIndicator();
+});
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    document.getElementById('api-status').textContent = '✗ Ključ mora začeti s sk-ant-';
+    document.getElementById('api-status').style.color = 'var(--red)';
+    return;
+  }
+  localStorage.setItem('msora_api_key', key);
+  document.getElementById('api-status').textContent = '✓ Ključ shranjen.';
+  document.getElementById('api-status').style.color = 'var(--green-mid)';
+  updateApiIndicator();
+  setTimeout(toggleApiPanel, 900);
+}
+
+function getApiKey() {
+  return localStorage.getItem('msora_api_key') || document.getElementById('api-key-input').value.trim();
+}
+
+// ─────────────────────────────────────────────────────────
+// PDF UPLOAD
+// ─────────────────────────────────────────────────────────
+function handlePdfUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') {
+    alert('Prosim naloži PDF datoteko.');
+    return;
+  }
+  state.pdfName = file.name;
+  document.getElementById('pdf-filename').textContent = '📄 ' + file.name;
+  document.getElementById('pdf-filename').classList.remove('hidden');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    // Strip data:application/pdf;base64, prefix
+    state.pdfBase64 = e.target.result.split(',')[1];
+    setStep(2);
+    showCard('card-distance');
+    startLocationSearch();
+  };
+  reader.readAsDataURL(file);
+}
+
+// Drag & drop
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    document.getElementById('pdf-input').files = e.dataTransfer.files;
+    handlePdfUpload({ target: { files: [file] } });
+  }
+});
+
+// ─────────────────────────────────────────────────────────
+// ISKANJE LOKACIJE (korak 2)
+// ─────────────────────────────────────────────────────────
+async function startLocationSearch() {
+  const key = getApiKey();
+  if (!key) {
+    document.getElementById('distance-search-status').className = 'status-box warning';
+    document.getElementById('distance-search-status').innerHTML = '⚠️ &nbsp;API ključ ni nastavljen. Vnesi razdaljo ročno.';
+    showEl('google-maps-block');
+    return;
+  }
+
+  try {
+    const resp = await callClaude(
+      `Iz te ponudbe M SORA izvleci SAMO naslov objekta/stranke (ulica, hišna številka, poštna številka, kraj). 
+Vrni SAMO JSON brez razlage: {"naslov": "...", "kraj": "..."}
+Če naslova ni, vrni: {"naslov": null, "kraj": null}`,
+      null, // no system prompt for this mini call
+      true  // pdf attached
+    );
+
+    let data;
+    try { data = JSON.parse(resp.replace(/```json|```/g, '').trim()); }
+    catch { data = { naslov: null, kraj: null }; }
+
+    if (data.kraj || data.naslov) {
+      const query = encodeURIComponent(`Žiri, Slovenia to ${data.naslov || ''} ${data.kraj || ''}, Slovenia`);
+      const gmapsUrl = `https://www.google.com/maps/dir/Žiri,+Slovenia/${encodeURIComponent((data.naslov || '') + ' ' + (data.kraj || '') + ', Slovenia')}`;
+      
+      document.getElementById('distance-search-status').className = 'status-box info';
+      document.getElementById('distance-search-status').innerHTML = 
+        `📍 &nbsp;Objekt v PDF: <strong>${data.naslov || ''} ${data.kraj || ''}</strong><br>
+         <span style="font-size:12px;color:var(--muted)">Odpri Google Zemljevide, ableri <em>Pot z avtom</em>, preveri razdaljo in jo vnesi spodaj.</span>`;
+      
+      document.getElementById('gmaps-link').href = gmapsUrl;
+      showEl('google-maps-block');
+    } else {
+      document.getElementById('distance-search-status').className = 'status-box warning';
+      document.getElementById('distance-search-status').innerHTML = '⚠️ &nbsp;Naslova nisem zasledil v PDF. Vnesi razdaljo ročno.';
+      showEl('google-maps-block');
+    }
+  } catch (e) {
+    document.getElementById('distance-search-status').className = 'status-box warning';
+    document.getElementById('distance-search-status').innerHTML = '⚠️ &nbsp;Napaka pri iskanju naslova: ' + e.message + '. Vnesi razdaljo ročno.';
+  }
+}
+
+function confirmDistance() {
+  const km = parseFloat(document.getElementById('km-input').value);
+  if (isNaN(km) || km <= 0) {
+    alert('Vnesi veljavno razdaljo v km.');
+    return;
+  }
+  state.kmEnosmerno = km;
+  setStep(3);
+  showCard('card-preview');
+  extractData();
+}
+
+// ─────────────────────────────────────────────────────────
+// EKSTRAKCIJA PODATKOV IZ PDF (korak 3)
+// ─────────────────────────────────────────────────────────
+async function extractData() {
+  showEl('extract-status');
+  hideEl('preview-data');
+
+  const systemPrompt = buildExtractionPrompt();
+
+  try {
+    const raw = await callClaude(systemPrompt, null, true);
+    let data;
+    try { data = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
+    catch (e) {
+      throw new Error('Claude ni vrnil veljavnega JSON. Odgovor: ' + raw.substring(0, 300));
+    }
+    state.extracted = data;
+    hideEl('extract-status');
+    renderPreview(data);
+    showEl('preview-data');
+  } catch (e) {
+    document.getElementById('extract-status').className = 'status-box error';
+    document.getElementById('extract-status-text').textContent = '✗ Napaka: ' + e.message;
+  }
+}
+
+function buildExtractionPrompt() {
+  return `Si asistent za obračun montaže podjetja M SORA d.d. Iz priložene ponudbe M SORA (PDF) izvleci VSE naslednje podatke in vrni IZKLJUČNO JSON brez razlage ali markdown.
+
+OBVEZNA STRUKTURA JSON:
+{
+  "narocilo": "N260104",
+  "projekt": "SL-ŽI-...",
+  "stranka": "Ime Priimek ali podjetje",
+  "naslov_objekta": "ulica hišna, poštna kraj",
+  "svetovalec": "Ime Priimek",
+  "datum_ponudbe": "DD.MM.YYYY",
+  "tip": "prenova" | "novogradnja",
+  "vsota_pozicij": 60702.98,
+  "popusti": [
+    {"naziv": "Količinski popust", "procent": 4.00, "znesek": -2428.12},
+    {"naziv": "Posebni popust", "procent": 2.00, "znesek": -1214.06}
+  ],
+  "montaza_bruto": 6892.59,
+  "montaza_popust_procent": null,
+  "montaza_popust_znesek": null,
+  "demontaza_bruto": 810.00,
+  "odvoz_bruto": 780.00,
+  "knauf_bruto_skupaj": 2333.83,
+  "pozicije": [
+    {
+      "poz": "1",
+      "lokacija": "Soba Babi",
+      "element": "LUMNIA dvokrilno D/DK",
+      "tip_montaze": "RAL" | "HST" | "fiksna" | "vhod",
+      "sirina_mm": 1690,
+      "visina_mm": 1130,
+      "obseg_tm": 5.64,
+      "zaluzija_sirina_m": 1.69,
+      "komarniki_kos": 0
+    }
+  ]
+}
+
+PRAVILA:
+- "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF, sicer "novogradnja"
+- "montaza_popust_procent": % popusta ki v ponudbi NEPOSREDNO SLEDI vrstici montaža (npr. "Popust za 100% avans"). NULL če take vrstice ni ali so vsi popusti PRED montažo.
+- "vsota_pozicij": vsota vseh pozicij PRED popusti (kot piše v ponudbi)
+- "popusti": VSI popusti ki se aplicirajo na vsoto pozicij (pred montažo). Avansni popust vključi ČE se aplicira na vsoto pozicij (preveri: popust_EUR / procent = vsota_pozicij).
+- "demontaza_bruto": vrednost postavke "demontaža" (NULL če ni)
+- "odvoz_bruto": vrednost postavke "odvoz" (NULL če ni)  
+- "knauf_bruto_skupaj": seštej VSE KNAUF postavke (NULL če jih ni)
+- Za "tip_montaze": RAL = standardno okno, HST = dvižno-drsna stena, fiksna = fiksna zasteklitev/Panoramic brez premičnega krila, vhod = vhodna vrata z obsvetlobo
+- "obseg_tm" = 2*(sirina_m + visina_m), zaokroženo na 3 decimale
+- "zaluzija_sirina_m": širina žaluzije v metrih (NULL če ni)
+- "komarniki_kos": število komarnikov pri tej poziciji (0 če ni)
+- Pozicij ne izpusti — vključi VSE razen tistih z vrednostjo 0,00 EUR in opisom npr. "NADSTROPJE"
+- Vrni SAMO JSON, nič drugega.`;
+}
+
+function renderPreview(data) {
+  // Osnvoni podatki
+  const grid = document.getElementById('data-grid');
+  const kmZnesek = (state.kmEnosmerno * 2 * KM_RATE).toFixed(2);
+  const items = [
+    ['Naročilo', data.narocilo],
+    ['Stranka', data.stranka],
+    ['Objekt', data.naslov_objekta],
+    ['Svetovalec', data.svetovalec],
+    ['Datum', data.datum_ponudbe],
+    ['Tip', data.tip === 'prenova' ? '🔧 Prenova' : '🏗️ Novogradnja'],
+    ['Montaža bruto', fmtEur(data.montaza_bruto)],
+    ['Demontaža', data.demontaza_bruto ? fmtEur(data.demontaza_bruto) : '—'],
+    ['Odvoz', data.odvoz_bruto ? fmtEur(data.odvoz_bruto) : '—'],
+    ['KNAUF skupaj', data.knauf_bruto_skupaj ? fmtEur(data.knauf_bruto_skupaj) : '—'],
+    ['Razdalja (enosmerno)', state.kmEnosmerno + ' km'],
+    ['Kilometrina', fmtEur(parseFloat(kmZnesek))],
+  ];
+  grid.innerHTML = items.map(([l,v]) => `
+    <div class="data-item">
+      <div class="di-label">${l}</div>
+      <div class="di-value ${v === '—' ? 'unset' : ''}">${v}</div>
+    </div>`).join('');
+
+  // Pozicije
+  const tbody = document.getElementById('positions-tbody');
+  tbody.innerHTML = (data.pozicije || []).map((p, i) => `
+    <tr style="background:${i%2===0?'#fff':'var(--bg)'}">
+      <td style="padding:5px 8px">${p.poz}</td>
+      <td style="padding:5px 8px">${p.lokacija || ''}</td>
+      <td style="padding:5px 8px">${p.element || ''}</td>
+      <td style="padding:5px 8px;font-family:'DM Mono',monospace;font-size:11px">${p.tip_montaze || ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.sirina_mm || ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.visina_mm || ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.obseg_tm || ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.zaluzija_sirina_m != null ? p.zaluzija_sirina_m : ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.komarniki_kos || ''}</td>
+    </tr>`).join('');
+}
+
+// ─────────────────────────────────────────────────────────
+// GENERIRANJE OBRAČUNA (korak 4)
+// ─────────────────────────────────────────────────────────
+async function generateBilling() {
+  setStep(4);
+  showCard('card-output');
+  showEl('generate-status');
+  hideEl('output-ready');
+
+  try {
+    const html = await callClaude(buildGenerationPrompt(), null, false);
+    // Poiščemo HTML vsebino
+    let cleanHtml = html;
+    const m = html.match(/<!DOCTYPE html>[\s\S]*<\/html>/i);
+    if (m) cleanHtml = m[0];
+
+    state.outputHtml = cleanHtml;
+    hideEl('generate-status');
+    showEl('output-ready');
+
+    // Prikaz v iframu
+    const frame = document.getElementById('output-frame');
+    const doc = frame.contentDocument || frame.contentWindow.document;
+    doc.open(); doc.write(cleanHtml); doc.close();
+
+  } catch (e) {
+    document.getElementById('generate-status').className = 'status-box error';
+    document.getElementById('generate-status').innerHTML = '✗ Napaka pri generiranju: ' + e.message;
+  }
+}
+
+function buildGenerationPrompt() {
+  const d = state.extracted;
+  const km = state.kmEnosmerno;
+  const kmZnesek = Math.round(km * 2 * KM_RATE * 100) / 100;
+
+  // Izračun popustnega faktorja
+  let efFaktor = 1.0;
+  let popustOpis = '';
+  let montazaPopustPct = d.montaza_popust_procent;
+  let montazaPopustZnesek = d.montaza_popust_znesek;
+
+  if (d.popusti && d.popusti.length > 0) {
+    // Vsi popusti so vzporedni (preverjeno z avansno formulo)
+    const skupajPct = d.popusti.reduce((s, p) => s + (p.procent || 0), 0);
+    efFaktor = Math.round((1 - skupajPct/100) * 100000) / 100000;
+    popustOpis = d.popusti.map(p => `${p.naziv} −${p.procent}%`).join(', ');
+  }
+
+  // Stran 1 izračuni
+  let stran1;
+  const montazaBruto = d.montaza_bruto;
+
+  if (d.tip === 'prenova') {
+    const knaufNeto = Math.round((d.knauf_bruto_skupaj || 0) * efFaktor * 100) / 100;
+    const demNeto = Math.round((d.demontaza_bruto || 0) * efFaktor * 100) / 100;
+    const odvozNeto = Math.round((d.odvoz_bruto || 0) * efFaktor * 100) / 100;
+    const osnova = Math.round((knaufNeto + demNeto + odvozNeto) * 100) / 100;
+    const skupajNeto = Math.round((osnova + montazaBruto) * 100) / 100;
+    const final1 = Math.round((skupajNeto + kmZnesek) * 100) / 100;
+    const m65 = Math.round(skupajNeto * 0.65 * 100) / 100;
+    const monterja = Math.round((m65 + kmZnesek) * 100) / 100;
+    stran1 = { tip:'prenova', knaufBruto:d.knauf_bruto_skupaj, demBruto:d.demontaza_bruto, odvozBruto:d.odvoz_bruto,
+      efFaktor, popustOpis, knaufNeto, demNeto, odvozNeto, osnova,
+      montazaBruto, skupajNeto, kmZnesek, final1, m65, monterja };
+  } else {
+    // Novogradnja
+    let montazaNeto = montazaBruto;
+    let popustZnesek = 0;
+    if (montazaPopustPct) {
+      popustZnesek = Math.round(montazaBruto * (montazaPopustPct/100) * 100) / 100;
+      montazaNeto = Math.round((montazaBruto - popustZnesek) * 100) / 100;
+    }
+    const final1 = Math.round((montazaNeto + kmZnesek) * 100) / 100;
+    const m65 = Math.round(montazaNeto * 0.65 * 100) / 100;
+    const monterja = Math.round((m65 + kmZnesek) * 100) / 100;
+    stran1 = { tip:'novogradnja', montazaBruto, montazaPopustPct, popustZnesek,
+      montazaNeto, kmZnesek, final1, m65, monterja };
+  }
+
+  // Stran 2 izračuni
+  const pozicije = d.pozicije || [];
+  let ralTm = 0, hstTm = 0, fiksnaTm = 0, vhodTm = 0;
+  let zalSirina = 0, komarnikosKos = 0;
+  let demTm = 0; // skupni obseg za dem/odvoz/knauf na stran 2
+
+  pozicije.forEach(p => {
+    const tm = p.obseg_tm || 0;
+    if (p.tip_montaze === 'RAL') ralTm += tm;
+    else if (p.tip_montaze === 'HST') hstTm += tm;
+    else if (p.tip_montaze === 'fiksna') fiksnaTm += tm;
+    else if (p.tip_montaze === 'vhod') vhodTm += tm;
+    if (p.zaluzija_sirina_m) zalSirina += p.zaluzija_sirina_m;
+    if (p.komarniki_kos) komarnikosKos += p.komarniki_kos;
+  });
+
+  // Skupni obseg za dem/odvoz/knauf (RAL+HST+fiksna+vhod)
+  const skupajTm = Math.round((ralTm+hstTm+fiksnaTm+vhodTm)*1000)/1000;
+
+  const ralEur = Math.round(ralTm*22*100)/100;
+  const hstEur = Math.round(hstTm*28*100)/100;
+  const fiksnaEur = Math.round(fiksnaTm*35*100)/100;
+  const vhodEur = Math.round(vhodTm*25*100)/100;
+  const zalEur = Math.round(zalSirina*22*100)/100;
+  const komEur = komarnikosKos * 12;
+  let demEur2 = 0, odvozEur2 = 0, knaufEur2 = 0;
+  if (d.tip === 'prenova') {
+    demEur2 = Math.round(skupajTm*8*100)/100;
+    odvozEur2 = Math.round(skupajTm*6*100)/100;
+    knaufEur2 = Math.round(skupajTm*25*100)/100;
+  }
+  const subtotal2 = Math.round((ralEur+hstEur+fiksnaEur+vhodEur+zalEur+komEur+demEur2+odvozEur2+knaufEur2)*100)/100;
+  const final2 = Math.round((subtotal2+kmZnesek)*100)/100;
+  const m65_2 = Math.round(subtotal2*0.65*100)/100;
+  const monterja2 = Math.round((m65_2+kmZnesek)*100)/100;
+
+  const stran2 = {
+    pozicije, ralTm, hstTm, fiksnaTm, vhodTm, skupajTm,
+    ralEur, hstEur, fiksnaEur, vhodEur, zalEur, zalSirina,
+    komEur, komarnikosKos,
+    demEur2, odvozEur2, knaufEur2,
+    subtotal2, kmZnesek, final2, m65_2, monterja2
+  };
+
+  state.stran2data = stran2;
+  return buildHtmlPrompt(d, stran1, stran2, km);
+}
+
+function buildHtmlPrompt(d, s1, s2, km) {
+  return `Generiraj HTML obračun montaže za M SORA d.d. z naslednjimi TOČNO IZRAČUNANIMI vrednostmi. Vrni SAMO celoten HTML dokument, brez razlage.
+
+PODATKI NAROČILA:
+- Naročilo: ${d.narocilo}
+- Stranka: ${d.stranka}
+- Naslov: ${d.naslov_objekta}
+- Svetovalec: ${d.svetovalec}
+- Datum: ${d.datum_ponudbe}
+- Tip: ${d.tip}
+
+LOGO (base64 JPEG, vstavi v img src): data:image/jpeg;base64,${LOGO_B64}
+
+CSS (obvezno):
+:root{--green-dark:#1a3d2e;--green-mid:#1e6a4a;--green-light:#e8f3ee;--red:#C8102E;}
+Font: DM Sans + DM Mono (Google Fonts import).
+Vsaka stran = <div class="page"> z max-width:780px, print page-break-after.
+
+STRAN 1 — MONTAŽNI OBRAČUN:
+${JSON.stringify(s1, null, 2)}
+
+STRAN 2 — ALTERNATIVNI OBRAČUN (interne cene, brez popustov):
+${JSON.stringify(s2, null, 2)}
+
+CENE STRAN 2: RAL=22€/tm, HST=28€/tm, fiksna=35€/tm, vhod=25€/tm, žaluzije=22€/m, komarniki=12€/kos, demontaža=8€/tm, odvoz=6€/tm, KNAUF=25€/tm.
+
+POZICIJE ZA STRAN 2 (razvrsti po tipih v ločene tabele — RAL / HST / fiksna / vhod / žaluzije / komarniki / dem+odvoz+knauf):
+${JSON.stringify(s2.pozicije.filter(p=>p.obseg_tm), null, 2)}
+
+FOOTER vsake strani: levo = "${d.narocilo}", desno = "Avtor: Boris".
+Kilometrina (${km} km × 2 × 0.43) = ${s1.kmZnesek} EUR — 100% monterju.
+Monterju = 65% montaže neto + km.
+
+Generiraj popoln dvostranki HTML z vsemi pozicijami, tabelami in izračuni točno kot so navedeni zgoraj.`;
+}
+
+// ─────────────────────────────────────────────────────────
+// CLAUDE API KLIC
+// ─────────────────────────────────────────────────────────
+async function callClaude(userPrompt, systemPrompt, attachPdf) {
+  const key = getApiKey();
+  if (!key) throw new Error('API ključ ni nastavljen');
+
+  const content = [];
+  if (attachPdf && state.pdfBase64) {
+    content.push({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: state.pdfBase64 }
+    });
+  }
+  content.push({ type: 'text', text: userPrompt });
+
+  const body = {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 8000,
+    messages: [{ role: 'user', content }]
+  };
+  if (systemPrompt) body.system = systemPrompt;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-calls': 'true'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(`API napaka ${resp.status}: ${err.error?.message || resp.statusText}`);
+  }
+
+  const data = await resp.json();
+  return data.content?.[0]?.text || '';
+}
+
+// ─────────────────────────────────────────────────────────
+// MONTERJEV HTML
+// ─────────────────────────────────────────────────────────
+function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
+  // s2data vsebuje vse vrednosti za stran 2
+  // Monterjev izpis: isto oblikovanje, zneski × 0.65, km ostane 100%
+  const s = s2data;
+  const f = (n) => n.toLocaleString('sl-SI', {minimumFractionDigits:2,maximumFractionDigits:2}) + ' EUR';
+  const ft = (n) => n.toLocaleString('sl-SI', {minimumFractionDigits:3,maximumFractionDigits:3});
+
+  // Monterjev delež (65%) za vsako kategorijo
+  const ralM    = Math.round(s.ralEur    * 0.65 * 100)/100;
+  const hstM    = Math.round(s.hstEur    * 0.65 * 100)/100;
+  const fiksnaM = Math.round(s.fiksnaEur * 0.65 * 100)/100;
+  const vhodM   = Math.round(s.vhodEur   * 0.65 * 100)/100;
+  const zalM    = Math.round(s.zalEur    * 0.65 * 100)/100;
+  const komM    = Math.round(s.komEur    * 0.65 * 100)/100;
+  const demM    = Math.round(s.demEur2   * 0.65 * 100)/100;
+  const odvozM  = Math.round(s.odvozEur2 * 0.65 * 100)/100;
+  const knaufM  = Math.round(s.knaufEur2 * 0.65 * 100)/100;
+  const subtotalM = Math.round((ralM+hstM+fiksnaM+vhodM+zalM+komM+demM+odvozM+knaufM)*100)/100;
+  const km = s.kmZnesek; // 100% monterju
+  const finalM = Math.round((subtotalM + km)*100)/100;
+
+  // Pozicije razvrščene po tipu
+  const pozRAL    = s.pozicije.filter(p=>p.tip_montaze==='RAL' && p.obseg_tm);
+  const pozHST    = s.pozicije.filter(p=>p.tip_montaze==='HST' && p.obseg_tm);
+  const pozFiksna = s.pozicije.filter(p=>p.tip_montaze==='fiksna' && p.obseg_tm);
+  const pozVhod   = s.pozicije.filter(p=>p.tip_montaze==='vhod' && p.obseg_tm);
+  const pozZal    = s.pozicije.filter(p=>p.zaluzija_sirina_m);
+  const pozKom    = s.pozicije.filter(p=>p.komarniki_kos);
+
+  const tableStyle = `width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:4px;`;
+  const thStyle = `background:#e8f3ee;color:#1a3d2e;font-family:'DM Mono',monospace;font-weight:600;font-size:10.5px;text-transform:uppercase;padding:6px 7px;text-align:left;border-bottom:2px solid #dde7e2;`;
+  const tdStyle = `padding:5px 7px;border-bottom:1px solid #e6ede9;`;
+  const tdNum = `${tdStyle}text-align:right;font-family:'DM Mono',monospace;`;
+  const trSub = `font-weight:700;background:#f4f8f6;border-top:1px solid #1e6a4a;`;
+
+  function posTable(rows, cols65Idx, extraCols, subtotalLabel, subtotalTm, subtotalEur) {
+    if (!rows.length) return '';
+    return `<table style="${tableStyle}">
+      <tr>${extraCols.map(c=>`<th style="${thStyle}">${c}</th>`).join('')}</tr>
+      ${rows.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+        <td style="${tdStyle}">${p.poz}</td>
+        <td style="${tdStyle}">${p.lokacija||''}</td>
+        <td style="${tdStyle}">${p.element||''}</td>
+        ${p.obseg_tm!=null?`<td style="${tdNum}">${ft(p.obseg_tm)}</td>`:''}
+        ${p.sirina_mm!=null && !p.obseg_tm?`<td style="${tdNum}">${p.zaluzija_sirina_m||''}</td>`:''}
+        ${p.komarniki_kos!=null && !p.obseg_tm && !p.zaluzija_sirina_m?`<td style="${tdNum}">${p.komarniki_kos}</td>`:''}
+      </tr>`).join('')}
+      <tr style="${trSub}">
+        <td colspan="3" style="${tdStyle}font-weight:700;">${subtotalLabel}</td>
+        ${subtotalTm!=null?`<td style="${tdNum}font-weight:700;">${subtotalTm}</td>`:''}
+        <td style="${tdNum}font-weight:700;color:#1a3d2e;"></td>
+      </tr>
+    </table>`;
+  }
+
+  // Sekcija helper
+  function sec(title, show, content) {
+    if (!show) return '';
+    return `<h3 style="color:#1e6a4a;font-size:12.5px;font-weight:600;margin:14px 0 6px 0;">${title}</h3>${content}`;
+  }
+
+  // RAL tabela
+  const ralTable = pozRAL.length ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${pozRAL.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+      <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+      <td style="${tdNum}">${ft(p.obseg_tm)}</td>
+      <td style="${tdNum}">14,30</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*22*0.65*100)/100)}</td>
+    </tr>`).join('')}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj RAL</td><td style="${tdNum}font-weight:700;">${ft(s.ralTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(ralM)}</td></tr>
+  </table>` : '';
+
+  const hstTable = pozHST.length ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${pozHST.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+      <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+      <td style="${tdNum}">${ft(p.obseg_tm)}</td>
+      <td style="${tdNum}">18,20</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*28*0.65*100)/100)}</td>
+    </tr>`).join('')}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj HST</td><td style="${tdNum}font-weight:700;">${ft(s.hstTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(hstM)}</td></tr>
+  </table>` : '';
+
+  const fiksnaTable = pozFiksna.length ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${pozFiksna.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+      <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+      <td style="${tdNum}">${ft(p.obseg_tm)}</td>
+      <td style="${tdNum}">22,75</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*35*0.65*100)/100)}</td>
+    </tr>`).join('')}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj fiksne zasteklitve</td><td style="${tdNum}font-weight:700;">${ft(s.fiksnaTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(fiksnaM)}</td></tr>
+  </table>` : '';
+
+  const vhodTable = pozVhod.length ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${pozVhod.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+      <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+      <td style="${tdNum}">${ft(p.obseg_tm)}</td>
+      <td style="${tdNum}">16,25</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*25*0.65*100)/100)}</td>
+    </tr>`).join('')}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj vhodna vrata</td><td style="${tdNum}font-weight:700;">${ft(s.vhodTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(vhodM)}</td></tr>
+  </table>` : '';
+
+  const zalTable = pozZal.length ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Širina m</th><th style="${thStyle};text-align:right">Cena/m (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${pozZal.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+      <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+      <td style="${tdNum}">${p.zaluzija_sirina_m}</td>
+      <td style="${tdNum}">14,30</td>
+      <td style="${tdNum}">${f(Math.round(p.zaluzija_sirina_m*22*0.65*100)/100)}</td>
+    </tr>`).join('')}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj žaluzije</td><td style="${tdNum}font-weight:700;">${s.zalSirina.toFixed(3)} m</td><td></td><td style="${tdNum}font-weight:700;">${f(zalM)}</td></tr>
+  </table>` : '';
+
+  const komTable = pozKom.length ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Kos</th><th style="${thStyle};text-align:right">Cena/kos (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${pozKom.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+      <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+      <td style="${tdNum}">${p.komarniki_kos}</td>
+      <td style="${tdNum}">7,80</td>
+      <td style="${tdNum}">${f(Math.round(p.komarniki_kos*12*0.65*100)/100)}</td>
+    </tr>`).join('')}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj komarniki</td><td style="${tdNum}font-weight:700;">${s.komarnikosKos}</td><td></td><td style="${tdNum}font-weight:700;">${f(komM)}</td></tr>
+  </table>` : '';
+
+  const demTable = (s.demEur2 || s.odvozEur2 || s.knaufEur2) ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Vrsta dela</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${s.demEur2 ? `<tr><td style="${tdStyle}">Demontaža starih oken</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">5,20</td><td style="${tdNum}">${f(demM)}</td></tr>`:''}
+    ${s.odvozEur2 ? `<tr style="background:#f5f7f5"><td style="${tdStyle}">Odvoz materiala na deponijo</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">3,90</td><td style="${tdNum}">${f(odvozM)}</td></tr>`:''}
+    ${s.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF špalet (brez pleskanja)</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">16,25</td><td style="${tdNum}">${f(knaufM)}</td></tr>`:''}
+    <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj demontaža / odvoz / KNAUF</td><td style="${tdNum}font-weight:700;">${f(demM+odvozM+knaufM)}</td></tr>
+  </table>` : '';
+
+  return `<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<title>Obračun za monterja — ${narocilo}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--green-dark:#1a3d2e;--green-mid:#1e6a4a;--green-light:#e8f3ee;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;color:#222;background:#fff;font-size:13px;}
+  .page{width:100%;max-width:780px;margin:0 auto;padding:30px 36px;}
+  .doc-header{display:flex;justify-content:space-between;align-items:center;background:var(--green-dark);color:#fff;padding:18px 28px;border-radius:6px 6px 0 0;}
+  .doc-header img{height:42px;}
+  .doc-header .title{text-align:right;}
+  .doc-header .title h1{margin:0;font-size:20px;font-weight:700;}
+  .doc-header .title .sub{font-family:'DM Mono',monospace;font-size:12px;opacity:.85;margin-top:4px;}
+  .info-strip{display:flex;justify-content:space-between;background:var(--green-light);padding:12px 28px;font-size:12.5px;border-bottom:2px solid var(--green-mid);}
+  .info-strip div{line-height:1.5;}
+  .info-strip .label{font-weight:600;color:var(--green-dark);font-family:'DM Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;}
+  .doc-body{padding:20px 28px 10px 28px;}
+  .doc-body h2{color:var(--green-dark);font-size:15px;font-weight:700;margin:18px 0 10px 0;padding-bottom:6px;border-bottom:2px solid var(--green-mid);}
+  .km-section{background:var(--green-light);border-radius:4px;padding:10px 14px;margin:14px 0;font-size:12.5px;}
+  .total-box{margin-top:16px;border:1px solid #dde7e2;border-radius:6px;overflow:hidden;}
+  .total-box table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .total-box td{padding:8px 14px;border-bottom:1px solid #e6ede9;}
+  .total-box td.num{text-align:right;font-family:'DM Mono',monospace;font-weight:600;}
+  .total-box tr.km td{color:var(--green-mid);font-weight:600;}
+  .total-box tr.final td{background:var(--green-dark);color:#fff;font-weight:700;font-size:13.5px;}
+  .total-box tr.final td.num{font-size:15px;}
+  .badge{display:inline-block;background:var(--green-mid);color:#fff;font-size:11px;font-family:'DM Mono',monospace;padding:3px 10px;border-radius:4px;margin-bottom:10px;}
+  .doc-footer{display:flex;justify-content:space-between;padding:14px 28px;border-top:2px solid var(--green-mid);font-family:'DM Mono',monospace;font-size:11px;color:#667;}
+  @media print{.no-print{display:none;}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-header">
+    <img src="data:image/jpeg;base64,${LOGO_B64}" alt="M SORA">
+    <div class="title">
+      <h1>OBRAČUN ZA MONTERJA</h1>
+      <div class="sub">Obračun po tekočih metrih — 65 % deleža</div>
+    </div>
+  </div>
+  <div class="info-strip">
+    <div><span class="label">Naročilo</span>${narocilo}</div>
+    <div><span class="label">Stranka</span>${stranka}</div>
+    <div><span class="label">Naslov</span>${naslov}</div>
+    <div><span class="label">Svetovalec</span>${svetovalec}</div>
+    <div><span class="label">Datum</span>${datum}</div>
+  </div>
+  <div class="doc-body">
+    <div class="badge">MONTERJEV DELEŽ — 65 % internih cen</div>
+    <h2>Obračun po tekočih metrih (65 % od internih cen M SORA)</h2>
+
+    ${sec('1. RAL montaža oken in vrat — 14,30 EUR/tm (65 % × 22)', pozRAL.length, ralTable)}
+    ${sec('2. HST drsne stene — 18,20 EUR/tm (65 % × 28)', pozHST.length, hstTable)}
+    ${sec('3. Fiksne zasteklitve — 22,75 EUR/tm (65 % × 35)', pozFiksna.length, fiksnaTable)}
+    ${sec('4. Vhodna vrata — 16,25 EUR/tm (65 % × 25)', pozVhod.length, vhodTable)}
+    ${sec('5. Zunanje žaluzije — 14,30 EUR/m (65 % × 22)', pozZal.length, zalTable)}
+    ${sec('6. Komarniki — 7,80 EUR/kos (65 % × 12)', pozKom.length, komTable)}
+    ${(s.demEur2||s.odvozEur2||s.knaufEur2) ? sec('7. Demontaža / odvoz / KNAUF (65 %)', true, demTable) : ''}
+
+    <div class="km-section">
+      <span style="font-family:'DM Mono',monospace;font-size:10.5px;color:var(--green-mid);text-transform:uppercase;display:block;margin-bottom:3px;">Kilometrina (100 % monterju)</span>
+      Žiri → objekt = ${s.kmEnosmerno || (km/(2*0.43)).toFixed(2)} km × 2 smeri × 0,43 EUR/km = <strong>${f(km)}</strong>
+    </div>
+
+    <div class="total-box">
+      <table>
+        ${ralM    ? `<tr><td>RAL montaža oken in vrat</td><td class="num">${f(ralM)}</td></tr>` : ''}
+        ${hstM    ? `<tr><td>HST drsne stene</td><td class="num">${f(hstM)}</td></tr>` : ''}
+        ${fiksnaM ? `<tr><td>Fiksne zasteklitve</td><td class="num">${f(fiksnaM)}</td></tr>` : ''}
+        ${vhodM   ? `<tr><td>Vhodna vrata</td><td class="num">${f(vhodM)}</td></tr>` : ''}
+        ${zalM    ? `<tr><td>Zunanje žaluzije</td><td class="num">${f(zalM)}</td></tr>` : ''}
+        ${komM    ? `<tr><td>Komarniki</td><td class="num">${f(komM)}</td></tr>` : ''}
+        ${demM    ? `<tr><td>Demontaža</td><td class="num">${f(demM)}</td></tr>` : ''}
+        ${odvozM  ? `<tr><td>Odvoz na deponijo</td><td class="num">${f(odvozM)}</td></tr>` : ''}
+        ${knaufM  ? `<tr><td>KNAUF špalet</td><td class="num">${f(knaufM)}</td></tr>` : ''}
+        <tr style="background:#f4f8f6;font-weight:700;"><td>Skupaj dela (brez km)</td><td class="num">${f(subtotalM)}</td></tr>
+        <tr class="km"><td>+ Kilometrina (100 % monterju)</td><td class="num">+ ${f(km)}</td></tr>
+        <tr class="final"><td>Skupaj za monterja</td><td class="num">${f(finalM)}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="doc-footer">
+    <div>${narocilo}</div>
+    <div>Obračun za monterja</div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+// ─────────────────────────────────────────────────────────
+// PRINT / DOWNLOAD
+// ─────────────────────────────────────────────────────────
+function getMonterHtml() {
+  if (!state.stran2data || !state.extracted) return null;
+  return buildMonterHtml(
+    state.stran2data,
+    state.extracted.narocilo || '',
+    state.extracted.stranka || '',
+    state.extracted.naslov_objekta || '',
+    state.extracted.svetovalec || '',
+    state.extracted.datum_ponudbe || ''
+  );
+}
+
+function printOutput(tip) {
+  if (tip === 'monter') {
+    const html = getMonterHtml();
+    if (!html) { alert('Najprej generiraj obračun.'); return; }
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => w.print();
+  } else {
+    const frame = document.getElementById('output-frame');
+    frame.contentWindow.print();
+  }
+}
+
+function downloadHtml(tip) {
+  const narocilo = state.extracted?.narocilo || 'obracun';
+  let html, filename;
+  if (tip === 'monter') {
+    html = getMonterHtml();
+    if (!html) { alert('Najprej generiraj obračun.'); return; }
+    filename = `${narocilo} - obracun za monterja.html`;
+  } else {
+    if (!state.outputHtml) return;
+    html = state.outputHtml;
+    filename = `Obracun_montaze_${narocilo}.html`;
+  }
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// ─────────────────────────────────────────────────────────
+// POMOCNE FUNKCIJE
+// ─────────────────────────────────────────────────────────
+function fmtEur(n) {
+  if (n == null) return '—';
+  return n.toLocaleString('sl-SI', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' EUR';
+}
+
+function showEl(id) { document.getElementById(id)?.classList.remove('hidden'); }
+function hideEl(id) { document.getElementById(id)?.classList.add('hidden'); }
+function showCard(id) { document.getElementById(id)?.classList.remove('hidden'); }
+
+function setStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById(`step-${i}`);
+    if (i < n) el.className = 'step done';
+    else if (i === n) el.className = 'step active';
+    else el.className = 'step';
+  }
+}
+
+function resetAll() {
+  state = { pdfBase64: null, pdfName: null, kmEnosmerno: null, extracted: null, outputHtml: null, stran2data: null };
+  document.getElementById('pdf-input').value = '';
+  document.getElementById('pdf-filename').classList.add('hidden');
+  document.getElementById('km-input').value = '';
+  ['card-distance','card-preview','card-output'].forEach(id => hideEl(id));
+  setStep(1);
+  window.scrollTo(0,0);
+}
+</script>
+</body>
+</html>
