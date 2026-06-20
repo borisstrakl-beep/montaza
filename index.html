@@ -422,7 +422,7 @@
           <div style="border:2px solid var(--green-mid);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
             <div style="font-weight:700;font-size:14px;color:var(--green-mid);">👷 Izpis za monterja</div>
             <div style="font-size:12px;color:var(--muted);line-height:1.5;">
-              Samo obračun po tm (stran 2). Zneski × 65 %. Kilometrina ostane 100 %. Datoteka: <em>N26xxx — obračun za monterja</em>.
+              Obračun po tekočih metrih za monterja. Datoteka: <em>N26xxx — obračun za monterja</em>.
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;">
               <button class="btn btn-secondary" style="border-color:var(--green-mid);color:var(--green-mid);" onclick="printOutput('monter')">🖨️ Natisni</button>
@@ -465,6 +465,7 @@ let state = {
   kmEnosmerno: null,
   extracted: null,   // JSON iz Claude
   outputHtml: null,
+  stran1data: null,  // podatki za stran 1
   stran2data: null,  // podatki za monterjev izpis
 };
 
@@ -651,7 +652,9 @@ async function extractData() {
     showEl('preview-data');
   } catch (e) {
     document.getElementById('extract-status').className = 'status-box error';
-    document.getElementById('extract-status-text').textContent = '✗ Napaka: ' + e.message;
+    document.getElementById('extract-status-text').innerHTML =
+      '✗ Napaka: ' + e.message +
+      '<br><br><button class="btn btn-secondary" onclick="extractData()">↻ Poskusi znova</button>';
   }
 }
 
@@ -759,11 +762,10 @@ async function generateBilling() {
   hideEl('output-ready');
 
   try {
-    const html = await callClaude(buildGenerationPrompt(), null, false);
-    // Poiščemo HTML vsebino
-    let cleanHtml = html;
-    const m = html.match(/<!DOCTYPE html>[\s\S]*<\/html>/i);
-    if (m) cleanHtml = m[0];
+    // Izračuni so že narejeni v buildGenerationPrompt (shranjeni v state.stran1data / state.stran2data)
+    buildGenerationPrompt(); // zagotovi da sta stran1data in stran2data sveža
+
+    const cleanHtml = buildKompletHtml(state.extracted, state.stran1data, state.stran2data);
 
     state.outputHtml = cleanHtml;
     hideEl('generate-status');
@@ -776,7 +778,9 @@ async function generateBilling() {
 
   } catch (e) {
     document.getElementById('generate-status').className = 'status-box error';
-    document.getElementById('generate-status').innerHTML = '✗ Napaka pri generiranju: ' + e.message;
+    document.getElementById('generate-status').innerHTML =
+      '✗ Napaka pri generiranju: ' + e.message +
+      '<br><br><button class="btn btn-secondary" onclick="generateBilling()">↻ Poskusi znova</button>';
   }
 }
 
@@ -873,44 +877,8 @@ function buildGenerationPrompt() {
     subtotal2, kmZnesek, final2, m65_2, monterja2
   };
 
+  state.stran1data = stran1;
   state.stran2data = stran2;
-  return buildHtmlPrompt(d, stran1, stran2, km);
-}
-
-function buildHtmlPrompt(d, s1, s2, km) {
-  return `Generiraj HTML obračun montaže za M SORA d.d. z naslednjimi TOČNO IZRAČUNANIMI vrednostmi. Vrni SAMO celoten HTML dokument, brez razlage.
-
-PODATKI NAROČILA:
-- Naročilo: ${d.narocilo}
-- Stranka: ${d.stranka}
-- Naslov: ${d.naslov_objekta}
-- Svetovalec: ${d.svetovalec}
-- Datum: ${d.datum_ponudbe}
-- Tip: ${d.tip}
-
-LOGO (base64 JPEG, vstavi v img src): data:image/jpeg;base64,${LOGO_B64}
-
-CSS (obvezno):
-:root{--green-dark:#1a3d2e;--green-mid:#1e6a4a;--green-light:#e8f3ee;--red:#C8102E;}
-Font: DM Sans + DM Mono (Google Fonts import).
-Vsaka stran = <div class="page"> z max-width:780px, print page-break-after.
-
-STRAN 1 — MONTAŽNI OBRAČUN:
-${JSON.stringify(s1, null, 2)}
-
-STRAN 2 — ALTERNATIVNI OBRAČUN (interne cene, brez popustov):
-${JSON.stringify(s2, null, 2)}
-
-CENE STRAN 2: RAL=22€/tm, HST=28€/tm, fiksna=35€/tm, vhod=25€/tm, žaluzije=22€/m, komarniki=12€/kos, demontaža=8€/tm, odvoz=6€/tm, KNAUF=25€/tm.
-
-POZICIJE ZA STRAN 2 (razvrsti po tipih v ločene tabele — RAL / HST / fiksna / vhod / žaluzije / komarniki / dem+odvoz+knauf):
-${JSON.stringify(s2.pozicije.filter(p=>p.obseg_tm), null, 2)}
-
-FOOTER vsake strani: levo = "${d.narocilo}", desno = "Avtor: Boris".
-Kilometrina (${km} km × 2 × 0.43) = ${s1.kmZnesek} EUR — 100% monterju.
-Monterju = 65% montaže neto + km.
-
-Generiraj popoln dvostranki HTML z vsemi pozicijami, tabelami in izračuni točno kot so navedeni zgoraj.`;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -931,7 +899,7 @@ async function callClaude(userPrompt, systemPrompt, attachPdf) {
 
   const body = {
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 8000,
+    max_tokens: 16000,
     messages: [{ role: 'user', content }]
   };
   if (systemPrompt) body.system = systemPrompt;
@@ -953,12 +921,295 @@ async function callClaude(userPrompt, systemPrompt, attachPdf) {
   }
 
   const data = await resp.json();
+  if (data.stop_reason === 'max_tokens') {
+    console.warn('Opozorilo: odgovor je bil odrezan zaradi max_tokens limita.');
+  }
   return data.content?.[0]?.text || '';
 }
 
 // ─────────────────────────────────────────────────────────
 // MONTERJEV HTML
 // ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// KOMPLET HTML (stran 1 + stran 2) — generirano lokalno, brez API klica
+// ─────────────────────────────────────────────────────────
+function buildKompletHtml(d, s1, s2) {
+  const f = (n) => (n==null?'—':n.toLocaleString('sl-SI', {minimumFractionDigits:2,maximumFractionDigits:2}) + ' EUR');
+  const ft = (n) => (n==null?'':n.toLocaleString('sl-SI', {minimumFractionDigits:3,maximumFractionDigits:3}));
+
+  const tableStyle = `width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:4px;`;
+  const thStyle = `background:#e8f3ee;color:#1a3d2e;font-family:'DM Mono',monospace;font-weight:600;font-size:10.5px;text-transform:uppercase;padding:6px 7px;text-align:left;border-bottom:2px solid #dde7e2;`;
+  const tdStyle = `padding:5px 7px;border-bottom:1px solid #e6ede9;`;
+  const tdNum = `${tdStyle}text-align:right;font-family:'DM Mono',monospace;`;
+  const trSub = `font-weight:700;background:#f4f8f6;border-top:1px solid #1e6a4a;`;
+
+  // ── STRAN 1: vrstice montažnega obračuna ──
+  let stran1Rows = '';
+  if (s1.tip === 'prenova') {
+    stran1Rows = `
+      <tr>
+        <td class="left">KNAUF (vsota KNAUF postavk) — bruto</td>
+        <td class="base">${f(s1.knaufBruto)}</td>
+        <td class="right">${f(s1.knaufBruto)}</td>
+      </tr>
+      <tr>
+        <td class="left">Demontaža — bruto</td>
+        <td class="base">${f(s1.demBruto)}</td>
+        <td class="right">${f(s1.demBruto)}</td>
+      </tr>
+      <tr>
+        <td class="left">Odvoz na deponijo — bruto</td>
+        <td class="base">${f(s1.odvozBruto)}</td>
+        <td class="right">${f(s1.odvozBruto)}</td>
+      </tr>
+      <tr class="discount">
+        <td class="left">− Skupni popust (${s1.popustOpis || '—'})</td>
+        <td class="base">faktor ${s1.efFaktor}</td>
+        <td class="right">− ${f(Math.round(((s1.knaufBruto||0)+(s1.demBruto||0)+(s1.odvozBruto||0))*(1-s1.efFaktor)*100)/100)}</td>
+      </tr>
+      <tr class="mid">
+        <td class="left">KNAUF + demontaža + odvoz neto</td>
+        <td class="base">× ${s1.efFaktor}</td>
+        <td class="right">${f(s1.osnova)}</td>
+      </tr>
+      <tr>
+        <td class="left">+ Montaža (posebna postavka — brez popusta)</td>
+        <td class="base">${f(s1.montazaBruto)}</td>
+        <td class="right">+ ${f(s1.montazaBruto)}</td>
+      </tr>
+      <tr class="mid">
+        <td class="left">Skupaj montaža neto (brez km)</td>
+        <td class="base">${f(s1.osnova)} + ${f(s1.montazaBruto)}</td>
+        <td class="right">${f(s1.skupajNeto)}</td>
+      </tr>
+      <tr class="add">
+        <td class="left">+ Kilometrina monterju</td>
+        <td class="base">100 % monterju</td>
+        <td class="right">+ ${f(s1.kmZnesek)}</td>
+      </tr>
+      <tr class="final">
+        <td class="left">Montaža neto skupaj s kilometrino monterja</td>
+        <td class="base">${f(s1.skupajNeto)} + ${f(s1.kmZnesek)}</td>
+        <td class="right">${f(s1.final1)}</td>
+      </tr>
+      <tr class="monterja">
+        <td class="left">Od tega za monterja (65&nbsp;% montaže + km)</td>
+        <td class="base">${f(s1.m65)} + ${f(s1.kmZnesek)}</td>
+        <td class="right">${f(s1.monterja)}</td>
+      </tr>`;
+  } else {
+    stran1Rows = `
+      <tr class="mid">
+        <td class="left">Montaža (po ponudbi M SORA)</td>
+        <td class="base">${s1.montazaPopustPct ? `− ${s1.montazaPopustPct}% popust` : 'brez popusta'}</td>
+        <td class="right">${f(s1.montazaBruto)}</td>
+      </tr>
+      ${s1.montazaPopustPct ? `
+      <tr class="discount">
+        <td class="left">− Popust na montažo ${s1.montazaPopustPct}%</td>
+        <td class="base">osnova: ${f(s1.montazaBruto)}</td>
+        <td class="right">− ${f(s1.popustZnesek)}</td>
+      </tr>
+      <tr class="mid">
+        <td class="left">Montaža neto</td>
+        <td class="base">${f(s1.montazaBruto)} − ${f(s1.popustZnesek)}</td>
+        <td class="right">${f(s1.montazaNeto)}</td>
+      </tr>` : ''}
+      <tr class="add">
+        <td class="left">+ Kilometrina monterju</td>
+        <td class="base">100 % monterju</td>
+        <td class="right">+ ${f(s1.kmZnesek)}</td>
+      </tr>
+      <tr class="final">
+        <td class="left">Montaža neto skupaj s kilometrino monterja</td>
+        <td class="base">${f(s1.montazaNeto)} + ${f(s1.kmZnesek)}</td>
+        <td class="right">${f(s1.final1)}</td>
+      </tr>
+      <tr class="monterja">
+        <td class="left">Od tega za monterja (65&nbsp;% montaže + km)</td>
+        <td class="base">${f(s1.m65)} + ${f(s1.kmZnesek)}</td>
+        <td class="right">${f(s1.monterja)}</td>
+      </tr>`;
+  }
+
+  // ── STRAN 2: tabele po kategorijah ──
+  const pozRAL    = s2.pozicije.filter(p=>p.tip_montaze==='RAL' && p.obseg_tm);
+  const pozHST    = s2.pozicije.filter(p=>p.tip_montaze==='HST' && p.obseg_tm);
+  const pozFiksna = s2.pozicije.filter(p=>p.tip_montaze==='fiksna' && p.obseg_tm);
+  const pozVhod   = s2.pozicije.filter(p=>p.tip_montaze==='vhod' && p.obseg_tm);
+  const pozZal    = s2.pozicije.filter(p=>p.zaluzija_sirina_m);
+  const pozKom    = s2.pozicije.filter(p=>p.komarniki_kos);
+
+  function posTable(rows, cena, enota) {
+    if (!rows.length) return '';
+    return `<table style="${tableStyle}">
+      <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">${enota==='m'?'Širina m':enota==='kos'?'Kos':'Obseg tm'}</th><th style="${thStyle};text-align:right">Cena/${enota}</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+      ${rows.map((p,i)=>{
+        const kolicina = enota==='m' ? p.zaluzija_sirina_m : enota==='kos' ? p.komarniki_kos : p.obseg_tm;
+        const znesek = Math.round(kolicina*cena*100)/100;
+        return `<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
+        <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
+        <td style="${tdNum}">${enota==='tm'?ft(kolicina):kolicina}</td>
+        <td style="${tdNum}">${cena.toFixed(2).replace('.',',')}</td>
+        <td style="${tdNum}">${f(znesek)}</td>
+      </tr>`;}).join('')}
+    </table>`;
+  }
+
+  const ralTable    = posTable(pozRAL, 22, 'tm');
+  const hstTable    = posTable(pozHST, 28, 'tm');
+  const fiksnaTable = posTable(pozFiksna, 35, 'tm');
+  const vhodTable   = posTable(pozVhod, 25, 'tm');
+  const zalTable    = posTable(pozZal, 22, 'm');
+  const komTable    = posTable(pozKom, 12, 'kos');
+
+  const demTable = (s2.demEur2 || s2.odvozEur2 || s2.knaufEur2) ? `<table style="${tableStyle}">
+    <tr><th style="${thStyle}">Vrsta dela</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    ${s2.demEur2 ? `<tr><td style="${tdStyle}">Demontaža starih oken</td><td style="${tdNum}">${ft(s2.skupajTm)}</td><td style="${tdNum}">8,00</td><td style="${tdNum}">${f(s2.demEur2)}</td></tr>`:''}
+    ${s2.odvozEur2 ? `<tr style="background:#f5f7f5"><td style="${tdStyle}">Odvoz materiala na deponijo</td><td style="${tdNum}">${ft(s2.skupajTm)}</td><td style="${tdNum}">6,00</td><td style="${tdNum}">${f(s2.odvozEur2)}</td></tr>`:''}
+    ${s2.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF špalet (brez pleskanja)</td><td style="${tdNum}">${ft(s2.skupajTm)}</td><td style="${tdNum}">25,00</td><td style="${tdNum}">${f(s2.knaufEur2)}</td></tr>`:''}
+  </table>` : '';
+
+  function sec(n, title, show, content) {
+    if (!show) return '';
+    return `<h3>${n}. ${title}</h3>${content}`;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<title>Obračun montaže ${d.narocilo}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--green-dark:#1a3d2e;--green-mid:#1e6a4a;--green-light:#e8f3ee;--red:#C8102E;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;color:#222;background:#fff;font-size:13px;}
+  .page{width:100%;max-width:780px;margin:0 auto;padding:30px 36px;page-break-after:always;}
+  .page:last-child{page-break-after:auto;}
+  .doc-header{display:flex;justify-content:space-between;align-items:center;background:var(--green-dark);color:#fff;padding:18px 28px;border-radius:6px 6px 0 0;}
+  .doc-header img{height:42px;}
+  .doc-header .title{text-align:right;}
+  .doc-header .title h1{margin:0;font-size:20px;font-weight:700;}
+  .doc-header .title .sub{font-family:'DM Mono',monospace;font-size:12px;opacity:.85;margin-top:4px;}
+  .info-strip{display:flex;justify-content:space-between;background:var(--green-light);padding:12px 28px;font-size:12.5px;border-bottom:2px solid var(--green-mid);flex-wrap:wrap;gap:8px;}
+  .info-strip div{line-height:1.5;}
+  .info-strip .label{font-weight:600;color:var(--green-dark);font-family:'DM Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.5px;display:block;}
+  .doc-body{padding:20px 28px 10px 28px;}
+  .doc-body h2{color:var(--green-dark);font-size:15px;font-weight:700;margin:18px 0 10px 0;padding-bottom:6px;border-bottom:2px solid var(--green-mid);}
+  .doc-body h3{color:var(--green-mid);font-size:12.5px;font-weight:600;margin:14px 0 6px 0;}
+  table.calc{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:10px;}
+  table.calc td{padding:7px 8px;border-bottom:1px solid #dde7e2;vertical-align:top;}
+  table.calc td.left{width:46%;}
+  table.calc td.base{width:34%;font-family:'DM Mono',monospace;font-size:11.5px;color:#556;}
+  table.calc td.right{width:20%;text-align:right;font-family:'DM Mono',monospace;font-weight:600;}
+  table.calc tr.mid td{background:#f4f8f6;font-weight:600;}
+  table.calc tr.add td{color:var(--green-mid);}
+  table.calc tr.discount td{color:var(--red);}
+  table.calc tr.final td{background:var(--green-dark);color:#fff;font-weight:700;font-size:13.5px;}
+  table.calc tr.final td.right{font-size:15px;}
+  table.calc tr.monterja td{background:var(--green-mid);color:#fff;font-weight:600;}
+  .km-section{background:var(--green-light);border-radius:4px;padding:10px 14px;margin:14px 0;font-size:12.5px;}
+  .total-box{margin-top:16px;border:1px solid #dde7e2;border-radius:6px;overflow:hidden;}
+  .total-box table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .total-box td{padding:8px 14px;border-bottom:1px solid #e6ede9;}
+  .total-box td.num{text-align:right;font-family:'DM Mono',monospace;font-weight:600;}
+  .total-box tr.mid td{background:#f4f8f6;font-weight:700;}
+  .total-box tr.km td{color:var(--green-mid);font-weight:600;}
+  .total-box tr.final td{background:var(--green-dark);color:#fff;font-weight:700;font-size:13.5px;}
+  .total-box tr.final td.num{font-size:15px;}
+  .total-box tr.monterja td{background:var(--green-mid);color:#fff;font-weight:600;}
+  .doc-footer{display:flex;justify-content:space-between;padding:14px 28px;border-top:2px solid var(--green-mid);font-family:'DM Mono',monospace;font-size:11px;color:#667;}
+  @media print{.no-print{display:none;}}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="doc-header">
+    <img src="data:image/jpeg;base64,${LOGO_B64}" alt="M SORA">
+    <div class="title">
+      <h1>OBRAČUN MONTAŽE</h1>
+      <div class="sub">Stran 1 / 2 — obračun po ponudbi M SORA</div>
+    </div>
+  </div>
+  <div class="info-strip">
+    <div><span class="label">Naročilo</span>${d.narocilo}</div>
+    <div><span class="label">Stranka</span>${d.stranka}</div>
+    <div><span class="label">Naslov</span>${d.naslov_objekta||''}</div>
+    <div><span class="label">Svetovalec</span>${d.svetovalec||''}</div>
+    <div><span class="label">Datum</span>${d.datum_ponudbe||''}</div>
+  </div>
+  <div class="doc-body">
+    <h2>Stran 1 — Montažni obračun (po ponudbi M SORA)</h2>
+    <table class="calc">${stran1Rows}</table>
+  </div>
+  <div class="doc-footer">
+    <div>${d.narocilo}</div>
+    <div>Avtor: Boris</div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="doc-header">
+    <img src="data:image/jpeg;base64,${LOGO_B64}" alt="M SORA">
+    <div class="title">
+      <h1>OBRAČUN MONTAŽE</h1>
+      <div class="sub">Stran 2 / 2 — alternativni obračun po internih cenah</div>
+    </div>
+  </div>
+  <div class="info-strip">
+    <div><span class="label">Naročilo</span>${d.narocilo}</div>
+    <div><span class="label">Stranka</span>${d.stranka}</div>
+    <div><span class="label">Naslov</span>${d.naslov_objekta||''}</div>
+    <div><span class="label">Svetovalec</span>${d.svetovalec||''}</div>
+    <div><span class="label">Datum</span>${d.datum_ponudbe||''}</div>
+  </div>
+  <div class="doc-body">
+    <h2>Stran 2 — Alternativni obračun (interne cene, brez popustov)</h2>
+
+    ${sec(1, 'RAL montaža oken in vrat — 22,00 EUR/tm', pozRAL.length, ralTable)}
+    ${sec(2, 'HST drsne stene — 28,00 EUR/tm', pozHST.length, hstTable)}
+    ${sec(3, 'Fiksne zasteklitve — 35,00 EUR/tm', pozFiksna.length, fiksnaTable)}
+    ${sec(4, 'Vhodna vrata — 25,00 EUR/tm', pozVhod.length, vhodTable)}
+    ${sec(5, 'Zunanje žaluzije — 22,00 EUR/m', pozZal.length, zalTable)}
+    ${sec(6, 'Komarniki — 12,00 EUR/kos', pozKom.length, komTable)}
+    ${(s2.demEur2||s2.odvozEur2||s2.knaufEur2) ? sec(7, 'Demontaža / odvoz / KNAUF', true, demTable) : ''}
+
+    <div class="km-section">
+      <span style="font-family:'DM Mono',monospace;font-size:10.5px;color:var(--green-mid);text-transform:uppercase;display:block;margin-bottom:3px;">Kilometrina (100&nbsp;% monterju)</span>
+      Žiri → objekt × 2 smeri × 0,43 EUR/km = <strong>${f(s2.kmZnesek)}</strong>
+    </div>
+
+    <h3>Skupni obračun</h3>
+    <div class="total-box">
+      <table>
+        ${s2.ralEur ? `<tr><td>RAL montaža oken in vrat</td><td class="num">${f(s2.ralEur)}</td></tr>` : ''}
+        ${s2.hstEur ? `<tr><td>HST drsne stene</td><td class="num">${f(s2.hstEur)}</td></tr>` : ''}
+        ${s2.fiksnaEur ? `<tr><td>Fiksne zasteklitve</td><td class="num">${f(s2.fiksnaEur)}</td></tr>` : ''}
+        ${s2.vhodEur ? `<tr><td>Vhodna vrata</td><td class="num">${f(s2.vhodEur)}</td></tr>` : ''}
+        ${s2.zalEur ? `<tr><td>Zunanje žaluzije</td><td class="num">${f(s2.zalEur)}</td></tr>` : ''}
+        ${s2.komEur ? `<tr><td>Komarniki</td><td class="num">${f(s2.komEur)}</td></tr>` : ''}
+        ${s2.demEur2 ? `<tr><td>Demontaža</td><td class="num">${f(s2.demEur2)}</td></tr>` : ''}
+        ${s2.odvozEur2 ? `<tr><td>Odvoz na deponijo</td><td class="num">${f(s2.odvozEur2)}</td></tr>` : ''}
+        ${s2.knaufEur2 ? `<tr><td>KNAUF špalet</td><td class="num">${f(s2.knaufEur2)}</td></tr>` : ''}
+        <tr class="mid"><td>Skupaj (brez km)</td><td class="num">${f(s2.subtotal2)}</td></tr>
+        <tr class="km"><td>+ Kilometrina (100&nbsp;% monterju)</td><td class="num">+ ${f(s2.kmZnesek)}</td></tr>
+        <tr class="final"><td>Skupaj neto</td><td class="num">${f(s2.final2)}</td></tr>
+        <tr class="monterja"><td>Vrednost za monterja (65&nbsp;% + km)</td><td class="num">${f(s2.m65_2)} + ${f(s2.kmZnesek)} = ${f(s2.monterja2)}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="doc-footer">
+    <div>${d.narocilo}</div>
+    <div>Avtor: Boris</div>
+  </div>
+</div>
+
+</body>
+</html>`;
+}
+
 function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   // s2data vsebuje vse vrednosti za stran 2
   // Monterjev izpis: isto oblikovanje, zneski × 0.65, km ostane 100%
@@ -966,7 +1217,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   const f = (n) => n.toLocaleString('sl-SI', {minimumFractionDigits:2,maximumFractionDigits:2}) + ' EUR';
   const ft = (n) => n.toLocaleString('sl-SI', {minimumFractionDigits:3,maximumFractionDigits:3});
 
-  // Monterjev delež (65%) za vsako kategorijo
+  // Delež monterja za vsako kategorijo (interni izračun, ni prikazan v izpisu)
   const ralM    = Math.round(s.ralEur    * 0.65 * 100)/100;
   const hstM    = Math.round(s.hstEur    * 0.65 * 100)/100;
   const fiksnaM = Math.round(s.fiksnaEur * 0.65 * 100)/100;
@@ -1022,7 +1273,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
 
   // RAL tabela
   const ralTable = pozRAL.length ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${pozRAL.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
@@ -1033,7 +1284,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   </table>` : '';
 
   const hstTable = pozHST.length ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${pozHST.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
@@ -1044,7 +1295,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   </table>` : '';
 
   const fiksnaTable = pozFiksna.length ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${pozFiksna.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
@@ -1055,7 +1306,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   </table>` : '';
 
   const vhodTable = pozVhod.length ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${pozVhod.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
@@ -1066,7 +1317,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   </table>` : '';
 
   const zalTable = pozZal.length ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Širina m</th><th style="${thStyle};text-align:right">Cena/m (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Širina m</th><th style="${thStyle};text-align:right">Cena/m</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${pozZal.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${p.zaluzija_sirina_m}</td>
@@ -1077,7 +1328,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   </table>` : '';
 
   const komTable = pozKom.length ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Kos</th><th style="${thStyle};text-align:right">Cena/kos (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Poz.</th><th style="${thStyle}">Lokacija</th><th style="${thStyle}">Element</th><th style="${thStyle};text-align:right">Kos</th><th style="${thStyle};text-align:right">Cena/kos</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${pozKom.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f7f5'}">
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${p.komarniki_kos}</td>
@@ -1088,7 +1339,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   </table>` : '';
 
   const demTable = (s.demEur2 || s.odvozEur2 || s.knaufEur2) ? `<table style="${tableStyle}">
-    <tr><th style="${thStyle}">Vrsta dela</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm (65%)</th><th style="${thStyle};text-align:right">Znesek</th></tr>
+    <tr><th style="${thStyle}">Vrsta dela</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${s.demEur2 ? `<tr><td style="${tdStyle}">Demontaža starih oken</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">5,20</td><td style="${tdNum}">${f(demM)}</td></tr>`:''}
     ${s.odvozEur2 ? `<tr style="background:#f5f7f5"><td style="${tdStyle}">Odvoz materiala na deponijo</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">3,90</td><td style="${tdNum}">${f(odvozM)}</td></tr>`:''}
     ${s.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF špalet (brez pleskanja)</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">16,25</td><td style="${tdNum}">${f(knaufM)}</td></tr>`:''}
@@ -1135,7 +1386,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
     <img src="data:image/jpeg;base64,${LOGO_B64}" alt="M SORA">
     <div class="title">
       <h1>OBRAČUN ZA MONTERJA</h1>
-      <div class="sub">Obračun po tekočih metrih — 65 % deleža</div>
+      <div class="sub">Obračun po tekočih metrih</div>
     </div>
   </div>
   <div class="info-strip">
@@ -1146,16 +1397,16 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
     <div><span class="label">Datum</span>${datum}</div>
   </div>
   <div class="doc-body">
-    <div class="badge">MONTERJEV DELEŽ — 65 % internih cen</div>
-    <h2>Obračun po tekočih metrih (65 % od internih cen M SORA)</h2>
+    <div class="badge">OBRAČUN ZA MONTERJA</div>
+    <h2>Obračun po tekočih metrih</h2>
 
-    ${sec('1. RAL montaža oken in vrat — 14,30 EUR/tm (65 % × 22)', pozRAL.length, ralTable)}
-    ${sec('2. HST drsne stene — 18,20 EUR/tm (65 % × 28)', pozHST.length, hstTable)}
-    ${sec('3. Fiksne zasteklitve — 22,75 EUR/tm (65 % × 35)', pozFiksna.length, fiksnaTable)}
-    ${sec('4. Vhodna vrata — 16,25 EUR/tm (65 % × 25)', pozVhod.length, vhodTable)}
-    ${sec('5. Zunanje žaluzije — 14,30 EUR/m (65 % × 22)', pozZal.length, zalTable)}
-    ${sec('6. Komarniki — 7,80 EUR/kos (65 % × 12)', pozKom.length, komTable)}
-    ${(s.demEur2||s.odvozEur2||s.knaufEur2) ? sec('7. Demontaža / odvoz / KNAUF (65 %)', true, demTable) : ''}
+    ${sec('1. RAL montaža oken in vrat — 14,30 EUR/tm', pozRAL.length, ralTable)}
+    ${sec('2. HST drsne stene — 18,20 EUR/tm', pozHST.length, hstTable)}
+    ${sec('3. Fiksne zasteklitve — 22,75 EUR/tm', pozFiksna.length, fiksnaTable)}
+    ${sec('4. Vhodna vrata — 16,25 EUR/tm', pozVhod.length, vhodTable)}
+    ${sec('5. Zunanje žaluzije — 14,30 EUR/m', pozZal.length, zalTable)}
+    ${sec('6. Komarniki — 7,80 EUR/kos', pozKom.length, komTable)}
+    ${(s.demEur2||s.odvozEur2||s.knaufEur2) ? sec('7. Demontaža / odvoz / KNAUF', true, demTable) : ''}
 
     <div class="km-section">
       <span style="font-family:'DM Mono',monospace;font-size:10.5px;color:var(--green-mid);text-transform:uppercase;display:block;margin-bottom:3px;">Kilometrina (100 % monterju)</span>
@@ -1258,7 +1509,7 @@ function setStep(n) {
 }
 
 function resetAll() {
-  state = { pdfBase64: null, pdfName: null, kmEnosmerno: null, extracted: null, outputHtml: null, stran2data: null };
+  state = { pdfBase64: null, pdfName: null, kmEnosmerno: null, extracted: null, outputHtml: null, stran1data: null, stran2data: null };
   document.getElementById('pdf-input').value = '';
   document.getElementById('pdf-filename').classList.add('hidden');
   document.getElementById('km-input').value = '';
