@@ -695,6 +695,7 @@ OBVEZNA STRUKTURA JSON:
     }
   ]
 }
+("poz" je lahko tudi npr. "0-13a", "0-13b" pri razdeljenih sestavljenih konstrukcijah — glej pravilo spodaj.)
 
 PRAVILA:
 - "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF, sicer "novogradnja"
@@ -709,6 +710,26 @@ PRAVILA:
 - "zaluzija_sirina_m": širina žaluzije v metrih (NULL če ni)
 - "komarniki_kos": število komarnikov pri tej poziciji (0 če ni)
 - Pozicij ne izpusti — vključi VSE razen tistih z vrednostjo 0,00 EUR in opisom npr. "NADSTROPJE"
+
+KLJUČNO PRAVILO — SESTAVLJENE KONSTRUKCIJE ("konstrukcijo sestaviti iz posameznih tipov"):
+Kadar pozicija opisuje sestavljeno konstrukcijo, ki vsebuje VEČ različnih elementov (npr. "fiksno okno Panoramic, enokrilen balkon DK" ali "fiksno okno Panoramic, fiksno okno Panoramic, drsna stena HS"), je TREBA to pozicijo RAZDELITI na več ločenih "navideznih" pozicij v JSON-u — eno za vsak segment — namesto da jo obravnavaš kot en sam element ene kategorije.
+
+Za vsak segment:
+- Uporabi isto "poz" številko z dodano pripono (npr. "0-13a", "0-13b") da je jasno da gre za isto fizično konstrukcijo
+- "sirina_mm" segmenta = širina TEGA SEGMENTA posebej (razvidna iz skice/risbe pozicije — širine posameznih delov so običajno navedene pod skico, npr. "905 905" pomeni dva enaka segmenta po 905mm)
+- "visina_mm" segmenta = POLNA višina celotne konstrukcije (enaka za vse segmente te pozicije)
+- "obseg_tm" = 2*(sirina_segmenta_m + polna_visina_m) — vsak segment je torej "navidezno okno" s svojo širino in polno višino
+- "tip_montaze" segmenta glede na njegov tip: Panoramic/fiksno polje → "fiksna", balkonska vrata/okno → "RAL", drsna stena → "HST"
+- "element" naj opiše kateri je ta del, npr. "Panoramic del (segment 1/2)" ali "Balkon DK (segment 2/2)"
+
+Primer: pozicija "0-13", mera 1810/2240, opis "fiksno okno Panoramic, enokrilen balkon DK", širine pod skico "905 | 905":
+→ razdeli na DVE pozicij v JSON-u:
+  1. {"poz":"0-13a", "element":"Panoramic del (segment 1/2)", "tip_montaze":"fiksna", "sirina_mm":905, "visina_mm":2240, "obseg_tm":6.290}
+  2. {"poz":"0-13b", "element":"Balkon DK (segment 2/2)", "tip_montaze":"RAL", "sirina_mm":905, "visina_mm":2240, "obseg_tm":6.290}
+
+Če širine posameznih segmentov niso eksplicitno navedene pod skico, jih oceni iz konteksta (npr. enakomerna delitev širine glede na število elementov), in to označi v opombi.
+Pozicije BREZ besedila "konstrukcijo sestaviti iz posameznih tipov" (torej standardna enojna okna, vrata, HST stene) NE razdeljuj — obravnavaj jih kot eno pozicijo kot doslej.
+
 - Vrni SAMO JSON, nič drugega.`;
 }
 
