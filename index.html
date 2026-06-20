@@ -712,9 +712,12 @@ PRAVILA:
 - Pozicij ne izpusti — vključi VSE razen tistih z vrednostjo 0,00 EUR in opisom npr. "NADSTROPJE"
 
 KLJUČNO PRAVILO — SESTAVLJENE KONSTRUKCIJE ("konstrukcijo sestaviti iz posameznih tipov"):
-Kadar pozicija opisuje sestavljeno konstrukcijo, ki vsebuje VEČ različnih elementov (npr. "fiksno okno Panoramic, enokrilen balkon DK" ali "fiksno okno Panoramic, fiksno okno Panoramic, drsna stena HS"), je TREBA to pozicijo RAZDELITI na več ločenih "navideznih" pozicij v JSON-u — eno za vsak segment — namesto da jo obravnavaš kot en sam element ene kategorije.
+Kadar pozicija opisuje sestavljeno konstrukcijo z VEČ elementi, jo RAZDELI na segmente SAMO ČE konstrukcija vsebuje vsaj eno "Panoramic" (fiksno) polje. Prisotnost Panoramic elementa je edini kriterij za razdelitev.
 
-Za vsak segment:
+- Če konstrukcija VSEBUJE Panoramic (npr. "fiksno okno Panoramic, enokrilen balkon DK" ali "fiksno okno Panoramic, fiksno okno Panoramic, drsna stena HS") → RAZDELI na ločene "navidezne" pozicije, ker Panoramic ima drugačno ceno na strani 2 (35 EUR/tm) kot ostali elementi.
+- Če konstrukcija NE VSEBUJE Panoramic (npr. "enokrilno okno DK, enokrilen balkon DK, enokrilno okno DK" ali katerakoli kombinacija samo navadnih oken/vrat/HST brez fiksnega Panoramic polja) → NE razdeljuj. Obravnavaj kot ENO pozicijo s skupnimi merami konstrukcije (širina × višina kot navedeno v "Mera:"), z eno samo kategorijo (običajno "RAL", ali "HST" če je v konstrukciji drsna stena).
+
+Za vsak segment (samo če je razdelitev potrebna zaradi Panoramic):
 - Uporabi isto "poz" številko z dodano pripono (npr. "0-13a", "0-13b") da je jasno da gre za isto fizično konstrukcijo
 - "sirina_mm" segmenta = širina TEGA SEGMENTA posebej (razvidna iz skice/risbe pozicije — širine posameznih delov so običajno navedene pod skico, npr. "905 905" pomeni dva enaka segmenta po 905mm)
 - "visina_mm" segmenta = POLNA višina celotne konstrukcije (enaka za vse segmente te pozicije)
@@ -722,12 +725,15 @@ Za vsak segment:
 - "tip_montaze" segmenta glede na njegov tip: Panoramic/fiksno polje → "fiksna", balkonska vrata/okno → "RAL", drsna stena → "HST"
 - "element" naj opiše kateri je ta del, npr. "Panoramic del (segment 1/2)" ali "Balkon DK (segment 2/2)"
 
-Primer: pozicija "0-13", mera 1810/2240, opis "fiksno okno Panoramic, enokrilen balkon DK", širine pod skico "905 | 905":
+Primer RAZDELITVE (vsebuje Panoramic): pozicija "0-13", mera 1810/2240, opis "fiksno okno Panoramic, enokrilen balkon DK", širine pod skico "905 | 905":
 → razdeli na DVE pozicij v JSON-u:
   1. {"poz":"0-13a", "element":"Panoramic del (segment 1/2)", "tip_montaze":"fiksna", "sirina_mm":905, "visina_mm":2240, "obseg_tm":6.290}
   2. {"poz":"0-13b", "element":"Balkon DK (segment 2/2)", "tip_montaze":"RAL", "sirina_mm":905, "visina_mm":2240, "obseg_tm":6.290}
 
-Če širine posameznih segmentov niso eksplicitno navedene pod skico, jih oceni iz konteksta (npr. enakomerna delitev širine glede na število elementov), in to označi v opombi.
+Primer BREZ RAZDELITVE (ni Panoramic): pozicija "0-24", mera 1720/2040, opis "enokrilno okno DK, enokrilen balkon DK, enokrilno okno DK" (brez besede "Panoramic" v opisu elementov):
+→ ENA pozicija: {"poz":"0-24", "element":"3QS — okno DK + balkon DK + okno DK", "tip_montaze":"RAL", "sirina_mm":1720, "visina_mm":2040, "obseg_tm":7.520}
+
+Če širine posameznih segmentov pri razdelitvi niso eksplicitno navedene pod skico, jih oceni iz konteksta (npr. enakomerna delitev širine glede na število elementov), in to označi v opombi.
 Pozicije BREZ besedila "konstrukcijo sestaviti iz posameznih tipov" (torej standardna enojna okna, vrata, HST stene) NE razdeljuj — obravnavaj jih kot eno pozicijo kot doslej.
 
 - Vrni SAMO JSON, nič drugega.`;
