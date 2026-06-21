@@ -672,13 +672,18 @@ OBVEZNA STRUKTURA JSON:
   "datum_ponudbe": "DD.MM.YYYY",
   "tip": "prenova" | "novogradnja",
   "vsota_pozicij": 60702.98,
-  "popusti": [
-    {"naziv": "Količinski popust", "procent": 4.00, "znesek": -2428.12},
-    {"naziv": "Posebni popust", "procent": 2.00, "znesek": -1214.06}
+  "popusti_na_vsoto_pozicij": [
+    {"naziv": "Količinski popust", "procent": 4.00, "znesek": -2428.12}
   ],
+  "popusti_kaskadni": false,
   "montaza_bruto": 6892.59,
-  "montaza_popust_procent": null,
-  "montaza_popust_znesek": null,
+  "popust_po_montazi": {
+    "obstaja": false,
+    "naziv": null,
+    "procent": null,
+    "znesek_iz_ponudbe": null,
+    "velja_tudi_za_montazo": null
+  },
   "demontaza_bruto": 810.00,
   "odvoz_bruto": 780.00,
   "knauf_bruto_skupaj": 2333.83,
@@ -700,9 +705,22 @@ OBVEZNA STRUKTURA JSON:
 
 PRAVILA:
 - "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF, sicer "novogradnja"
-- "montaza_popust_procent": % popusta ki v ponudbi NEPOSREDNO SLEDI vrstici montaža (npr. "Popust za 100% avans"). NULL če take vrstice ni ali so vsi popusti PRED montažo.
 - "vsota_pozicij": vsota vseh pozicij PRED popusti (kot piše v ponudbi)
-- "popusti": VSI popusti ki se aplicirajo na vsoto pozicij (pred montažo). Avansni popust vključi ČE se aplicira na vsoto pozicij (preveri: popust_EUR / procent = vsota_pozicij).
+- "popusti_na_vsoto_pozicij": VSI popusti, ki se v ponudbi pojavijo PRED postavko "Montaža" (torej veljajo za okna/vrata, ne za montažo)
+
+KLJUČNO — UGOTOVI ALI SO POPUSTI KASKADNI ALI VZPOREDNI (polje "popusti_kaskadni"):
+Za vsak popust v "popusti_na_vsoto_pozicij" preveri: ali je popust_EUR = procent% × vsota_pozicij (VZPOREDNO, vsi popusti računani na isto osnovo), ali je popust_EUR = procent% × (vsota_pozicij zmanjšana za prejšnje popuste) (KASKADNO, vsak popust na že zmanjšano osnovo). Izračunaj OBOJE in primerjaj s pravim zneskom iz ponudbe — kar se ujema na cent natančno, to drži. Nastavi "popusti_kaskadni": true/false glede na ugotovitev.
+
+KLJUČNO — POPUST KI SLEDI MONTAŽI (polje "popust_po_montazi"):
+Če v ponudbi za vrstico "Montaža" sledi še en popust (npr. "Popust za 100% avans ob potrditvi naročila"), MORAŠ ugotoviti ALI TA POPUST VPLIVA TUDI NA MONTAŽO, z naslednjim matematičnim testom (ne ugibaj, izračunaj):
+1. Izračunaj osnovo_oken = vsota_pozicij po vseh "popusti_na_vsoto_pozicij" (kaskadno ali vzporedno, kot si ugotovil zgoraj)
+2. Test A — popust velja SAMO za okna: ali je znesek_popusta_iz_ponudbe = procent% × osnova_oken?
+3. Test B — popust velja TUDI za montažo: ali je znesek_popusta_iz_ponudbe = procent% × (osnova_oken + montaza_bruto)?
+4. Kar od teh dveh testov se ujema z dejanskim zneskom iz ponudbe na cent natančno, to je pravilno. Nastavi "velja_tudi_za_montazo": true (če se ujema Test B) ali false (če se ujema Test A).
+5. Dodatna kontrola: preveri da tvoj izračunani "Skupaj neto" (osnova_oken_neto + montaza_neto_ali_bruto) ustreza "Skupaj neto" navedenem v ponudbi.
+Primer Test B (velja tudi za montažo): vsota_pozicij=12.644,48, popusti kaskadno 2%+2%+3% → osnova_oken=11.779,45; montaža=1.517,34; (11.779,45+1.517,34)×3%=398,90 = znesek iz ponudbe ✓ → velja_tudi_za_montazo:true.
+Primer Test A (NE velja za montažo): vsota_pozicij=60.702,98, popusti vzporedno 4%+2%+2% → osnova_oken po teh treh; nato avansni 3%×60.702,98(vsota_pozicij prvotna, ker so bili prejšnji trije vzporedni)=1.821,09 = znesek iz ponudbe ✓ → velja_tudi_za_montazo:false.
+- Če take popustne vrstice po montaži sploh ni, nastavi "popust_po_montazi.obstaja": false in ostala polja na null.
 - "demontaza_bruto": vrednost postavke "demontaža" (NULL če ni)
 - "odvoz_bruto": vrednost postavke "odvoz" (NULL če ni)  
 - "knauf_bruto_skupaj": seštej VSE KNAUF postavke (NULL če jih ni)
@@ -817,47 +835,72 @@ function buildGenerationPrompt() {
   const km = state.kmEnosmerno;
   const kmZnesek = Math.round(km * 2 * KM_RATE * 100) / 100;
 
-  // Izračun popustnega faktorja
+  // ── Izračun faktorja za popuste NA VSOTO POZICIJ (kaskadno ali vzporedno) ──
   let efFaktor = 1.0;
   let popustOpis = '';
-  let montazaPopustPct = d.montaza_popust_procent;
-  let montazaPopustZnesek = d.montaza_popust_znesek;
+  const popustiVP = d.popusti_na_vsoto_pozicij || [];
 
-  if (d.popusti && d.popusti.length > 0) {
-    // Vsi popusti so vzporedni (preverjeno z avansno formulo)
-    const skupajPct = d.popusti.reduce((s, p) => s + (p.procent || 0), 0);
-    efFaktor = Math.round((1 - skupajPct/100) * 100000) / 100000;
-    popustOpis = d.popusti.map(p => `${p.naziv} −${p.procent}%`).join(', ');
+  if (popustiVP.length > 0) {
+    if (d.popusti_kaskadni) {
+      // Kaskadno: vsak popust se aplicira na že-zmanjšano osnovo
+      efFaktor = popustiVP.reduce((f, p) => f * (1 - (p.procent || 0) / 100), 1.0);
+    } else {
+      // Vzporedno: vsi popusti seštejejo % in se odštejejo od izvirne vsote
+      const skupajPct = popustiVP.reduce((s, p) => s + (p.procent || 0), 0);
+      efFaktor = 1 - skupajPct / 100;
+    }
+    efFaktor = Math.round(efFaktor * 100000) / 100000;
+    popustOpis = popustiVP.map(p => `${p.naziv} −${p.procent}%`).join(', ') +
+      (d.popusti_kaskadni ? ' (kaskadno)' : ' (vzporedno)');
   }
 
-  // Stran 1 izračuni
-  let stran1;
+  // ── Popust, ki sledi montaži — ugotovi ali vpliva tudi na montažo ──
+  const popustPoMontazi = d.popust_po_montazi || { obstaja: false };
   const montazaBruto = d.montaza_bruto;
+  let montazaNeto = montazaBruto;
+  let montazaPopustOpis = null;
+  let montazaPopustZnesek = 0;
+
+  if (popustPoMontazi.obstaja && popustPoMontazi.velja_tudi_za_montazo) {
+    const pct = popustPoMontazi.procent / 100;
+    montazaPopustZnesek = Math.round(montazaBruto * pct * 100) / 100;
+    montazaNeto = Math.round((montazaBruto - montazaPopustZnesek) * 100) / 100;
+    montazaPopustOpis = `${popustPoMontazi.naziv} −${popustPoMontazi.procent}%`;
+  }
+
+  // ── Stran 1 izračuni ──
+  let stran1;
 
   if (d.tip === 'prenova') {
-    const knaufNeto = Math.round((d.knauf_bruto_skupaj || 0) * efFaktor * 100) / 100;
-    const demNeto = Math.round((d.demontaza_bruto || 0) * efFaktor * 100) / 100;
-    const odvozNeto = Math.round((d.odvoz_bruto || 0) * efFaktor * 100) / 100;
+    // KNAUF, demontaža, odvoz: najprej faktor popustov-na-vsoto-pozicij,
+    // nato (če velja_tudi_za_montazo) tudi popust-po-montazi se nanje aplicira enako kot na montažo
+    let knaufNeto = Math.round((d.knauf_bruto_skupaj || 0) * efFaktor * 100) / 100;
+    let demNeto = Math.round((d.demontaza_bruto || 0) * efFaktor * 100) / 100;
+    let odvozNeto = Math.round((d.odvoz_bruto || 0) * efFaktor * 100) / 100;
+
+    if (popustPoMontazi.obstaja && popustPoMontazi.velja_tudi_za_montazo) {
+      const pct2 = popustPoMontazi.procent / 100;
+      knaufNeto = Math.round(knaufNeto * (1 - pct2) * 100) / 100;
+      demNeto = Math.round(demNeto * (1 - pct2) * 100) / 100;
+      odvozNeto = Math.round(odvozNeto * (1 - pct2) * 100) / 100;
+    }
+
     const osnova = Math.round((knaufNeto + demNeto + odvozNeto) * 100) / 100;
-    const skupajNeto = Math.round((osnova + montazaBruto) * 100) / 100;
+    const skupajNeto = Math.round((osnova + montazaNeto) * 100) / 100;
     const final1 = Math.round((skupajNeto + kmZnesek) * 100) / 100;
     const m65 = Math.round(skupajNeto * 0.65 * 100) / 100;
     const monterja = Math.round((m65 + kmZnesek) * 100) / 100;
     stran1 = { tip:'prenova', knaufBruto:d.knauf_bruto_skupaj, demBruto:d.demontaza_bruto, odvozBruto:d.odvoz_bruto,
-      efFaktor, popustOpis, knaufNeto, demNeto, odvozNeto, osnova,
-      montazaBruto, skupajNeto, kmZnesek, final1, m65, monterja };
+      efFaktor, popustOpis, montazaPopustOpis, montazaPopustZnesek, knaufNeto, demNeto, odvozNeto, osnova,
+      montazaBruto, montazaNeto, skupajNeto, kmZnesek, final1, m65, monterja };
   } else {
-    // Novogradnja
-    let montazaNeto = montazaBruto;
-    let popustZnesek = 0;
-    if (montazaPopustPct) {
-      popustZnesek = Math.round(montazaBruto * (montazaPopustPct/100) * 100) / 100;
-      montazaNeto = Math.round((montazaBruto - popustZnesek) * 100) / 100;
-    }
+    // Novogradnja: osnova je SAMO montaža; popust-po-montazi (če obstaja) vpliva nanjo neposredno
     const final1 = Math.round((montazaNeto + kmZnesek) * 100) / 100;
     const m65 = Math.round(montazaNeto * 0.65 * 100) / 100;
     const monterja = Math.round((m65 + kmZnesek) * 100) / 100;
-    stran1 = { tip:'novogradnja', montazaBruto, montazaPopustPct, popustZnesek,
+    stran1 = { tip:'novogradnja', montazaBruto,
+      montazaPopustPct: popustPoMontazi.obstaja ? popustPoMontazi.procent : null,
+      popustZnesek: montazaPopustZnesek,
       montazaNeto, kmZnesek, final1, m65, monterja };
   }
 
@@ -974,6 +1017,34 @@ function buildKompletHtml(d, s1, s2) {
   // ── STRAN 1: vrstice montažnega obračuna ──
   let stran1Rows = '';
   if (s1.tip === 'prenova') {
+    const popustPoMontaziVrstica = s1.montazaPopustOpis ? `
+      <tr class="discount">
+        <td class="left">− Dodatni popust na KNAUF+dem.+odvoz (${s1.montazaPopustOpis}, velja tudi za montažo)</td>
+        <td class="base">—</td>
+        <td class="right">vključeno v vrstico zgoraj</td>
+      </tr>` : '';
+    const montazaVrstica = s1.montazaPopustOpis ? `
+      <tr>
+        <td class="left">+ Montaža — bruto</td>
+        <td class="base">${f(s1.montazaBruto)}</td>
+        <td class="right">${f(s1.montazaBruto)}</td>
+      </tr>
+      <tr class="discount">
+        <td class="left">− ${s1.montazaPopustOpis} (velja tudi za montažo)</td>
+        <td class="base">osnova: ${f(s1.montazaBruto)}</td>
+        <td class="right">− ${f(s1.montazaPopustZnesek)}</td>
+      </tr>
+      <tr class="mid">
+        <td class="left">Montaža neto</td>
+        <td class="base">${f(s1.montazaBruto)} − ${f(s1.montazaPopustZnesek)}</td>
+        <td class="right">${f(s1.montazaNeto)}</td>
+      </tr>` : `
+      <tr>
+        <td class="left">+ Montaža (posebna postavka — brez popusta)</td>
+        <td class="base">${f(s1.montazaBruto)}</td>
+        <td class="right">+ ${f(s1.montazaBruto)}</td>
+      </tr>`;
+
     stran1Rows = `
       <tr>
         <td class="left">KNAUF (vsota KNAUF postavk) — bruto</td>
@@ -991,23 +1062,18 @@ function buildKompletHtml(d, s1, s2) {
         <td class="right">${f(s1.odvozBruto)}</td>
       </tr>
       <tr class="discount">
-        <td class="left">− Skupni popust (${s1.popustOpis || '—'})</td>
+        <td class="left">− Popust na vsoto pozicij (${s1.popustOpis || '—'})</td>
         <td class="base">faktor ${s1.efFaktor}</td>
         <td class="right">− ${f(Math.round(((s1.knaufBruto||0)+(s1.demBruto||0)+(s1.odvozBruto||0))*(1-s1.efFaktor)*100)/100)}</td>
-      </tr>
+      </tr>${popustPoMontaziVrstica}
       <tr class="mid">
         <td class="left">KNAUF + demontaža + odvoz neto</td>
-        <td class="base">× ${s1.efFaktor}</td>
+        <td class="base">—</td>
         <td class="right">${f(s1.osnova)}</td>
-      </tr>
-      <tr>
-        <td class="left">+ Montaža (posebna postavka — brez popusta)</td>
-        <td class="base">${f(s1.montazaBruto)}</td>
-        <td class="right">+ ${f(s1.montazaBruto)}</td>
-      </tr>
+      </tr>${montazaVrstica}
       <tr class="mid">
         <td class="left">Skupaj montaža neto (brez km)</td>
-        <td class="base">${f(s1.osnova)} + ${f(s1.montazaBruto)}</td>
+        <td class="base">${f(s1.osnova)} + ${f(s1.montazaNeto)}</td>
         <td class="right">${f(s1.skupajNeto)}</td>
       </tr>
       <tr class="add">
