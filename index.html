@@ -375,6 +375,7 @@
                   <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Obseg (tm)</th>
                   <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Žaluzija (m)</th>
                   <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">Komarniki</th>
+                  <th style="padding:6px 8px;text-align:right;border-bottom:2px solid var(--border);">KNAUF (tm)</th>
                 </tr>
               </thead>
               <tbody id="positions-tbody"></tbody>
@@ -768,6 +769,14 @@ Ena pozicija lahko ima VEČ KNAUF vrstic hkrati (npr. tip A in tip B, ali dve ra
 Če pozicija nima nobene KNAUF omembe, je "knauf_tm": 0 za to pozicijo.
 "knauf_bruto_skupaj" (na vrhu JSON-a) = vsota vseh KNAUF bruto zneskov (tip A direktno iz ponudbe + tip B rekonstruirano) čez vse pozicije. SAMO če v CELOTNEM PDF-ju ni ČISTO NOBENE besede "KNAUF" nikjer, je "knauf_bruto_skupaj": null — sicer je to polje VEDNO številka večja od 0.
 
+⚠️ OBVEZNA KONČNA KONTROLA (naredi to KOT ZADNJI KORAK, preden oddaš JSON):
+1. Preglej CELOTEN PDF od prve do zadnje strani in izpiši si (samo zase, v razmišljanju) seznam VSAKE posamezne vrstice, ki vsebuje besedo "KNAUF", skupaj z njeno pozicijo in EUR zneskom iz stolpca "skupaj:".
+2. Preštej koliko takih vrstic si našel/-la. Ena pozicija ima lahko 1 ali 2 KNAUF vrstici (npr. "zapora špalet" IN "zapora police" na isti poziciji) — obe morata biti šteti posebej.
+3. Seštej VSE te zneske — to mora biti točno enako "knauf_bruto_skupaj" v tvojem JSON odgovoru. Če se število KNAUF vrstic, ki si jih našel v koraku 1, ne ujema s tem, kar si dejansko vključil/-a v vsoto, PONOVNO preglej PDF — to je znak, da si eno ali več vrstic izpustil/-a.
+4. Ta korak je KRITIČEN, ker je izpuščanje KNAUF vrstic (zlasti pri ponudbah z 10+ pozicijami, kjer so KNAUF vrstice raztresene čez več strani) ena najpogostejših napak. Bolje je porabiti več časa za temeljit pregled kot oddati nepopolno vsoto.
+
+Primer pravilnega štetja (N260159, 12 pozicij, nekatere imajo 2 KNAUF vrstici): poz.1 (1×), poz.2 (2×), poz.3 (1×), poz.4 (1×), poz.5 (2×), poz.5a (2×), poz.7 (2×), poz.8 (1×), poz.9 (1×), poz.10 (2×), poz.11 (1×) = SKUPAJ 16 KNAUF vrstic čez 11 pozicij (poz.6 in poz.12 nimata KNAUF), vsota vseh = 1.872,19 EUR. Če bi izpustil/-a samo eno vrstico (npr. poz.7 "zapora police" 35,28 EUR), bi bila vsota napačna.
+
 Primer (N260113): poz.1 "rolete+izolacija do 300mm", širina 1,140m → knauf_tm=1.140, bruto=46×1,140=52,44; poz.4 (sestavljena, mera 2140mm) ima DVE vrstici "rolete+izolacija do 300mm" (knauf_tm=2.140, bruto=98,44) IN "zapora police do 200mm" (knauf_tm=2.140, bruto=41,94) → za poz.4: knauf_tm=2.140+2.140=4.280, bruto=140,38.
 
 - Za "tip_montaze": RAL = standardno okno, HST = dvižno-drsna stena, fiksna = fiksna zasteklitev/Panoramic brez premičnega krila, vhod = vhodna vrata z obsvetlobo
@@ -818,7 +827,6 @@ function renderPreview(data) {
     ['Montaža bruto', fmtEur(data.montaza_bruto)],
     ['Demontaža', data.demontaza_bruto ? fmtEur(data.demontaza_bruto) : '—'],
     ['Odvoz', data.odvoz_bruto ? fmtEur(data.odvoz_bruto) : '—'],
-    ['KNAUF skupaj', data.knauf_bruto_skupaj ? fmtEur(data.knauf_bruto_skupaj) : '—'],
     ['Razdalja (enosmerno)', state.kmEnosmerno + ' km'],
     ['Kilometrina', fmtEur(parseFloat(kmZnesek))],
   ];
@@ -826,7 +834,15 @@ function renderPreview(data) {
     <div class="data-item">
       <div class="di-label">${l}</div>
       <div class="di-value ${v === '—' ? 'unset' : ''}">${v}</div>
-    </div>`).join('');
+    </div>`).join('') + `
+    <div class="data-item" style="border-color:var(--green-mid);">
+      <div class="di-label">KNAUF skupaj (uredljivo — preveri s PDF!)</div>
+      <input type="number" id="knauf-override-input" step="0.01" min="0"
+        value="${data.knauf_bruto_skupaj != null ? data.knauf_bruto_skupaj : ''}"
+        placeholder="0,00"
+        style="width:100%;padding:4px 6px;border:1px solid var(--green-mid);border-radius:4px;font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--green-dark);"
+        onchange="updateKnaufOverride(this.value)">
+    </div>`;
 
   // Pozicije
   const tbody = document.getElementById('positions-tbody');
@@ -841,7 +857,21 @@ function renderPreview(data) {
       <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.obseg_tm || ''}</td>
       <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.zaluzija_sirina_m != null ? p.zaluzija_sirina_m : ''}</td>
       <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${p.komarniki_kos || ''}</td>
+      <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;${p.knauf_tm ? 'font-weight:600;color:var(--green-mid);' : 'color:#ccc;'}">${p.knauf_tm || 0}</td>
     </tr>`).join('');
+}
+
+function updateKnaufOverride(value) {
+  if (!state.extracted) return;
+  const v = parseFloat(value);
+  state.extracted.knauf_bruto_skupaj = isNaN(v) ? null : v;
+  renderWarnings(state.extracted);
+  const box = document.getElementById('preview-warnings');
+  const note = 'ℹ️ Ročno popravljen KNAUF znesek vpliva SAMO na stran 1 (montažni obračun). ' +
+    'Stran 2 (obračun po tm) uporablja "knauf_tm" po posameznih pozicijah, kar ročni popravek ne spremeni — ' +
+    'preveri tudi tabelo pozicij spodaj, stolpec "KNAUF (tm)", če je potreben dodaten popravek za stran 2.';
+  box.innerHTML = (box.innerHTML ? box.innerHTML + '<br><br>' : '') + note;
+  showEl('preview-warnings');
 }
 
 // ─────────────────────────────────────────────────────────
@@ -850,16 +880,32 @@ function renderPreview(data) {
 // ─────────────────────────────────────────────────────────
 function renderWarnings(data) {
   const warnings = [];
+  const pozicije = data.pozicije || [];
 
   // 1) KNAUF manjka popolnoma — pogosta napaka ekstrakcije, ko je KNAUF
-  //    naveden samo kot opisno besedilo (brez lastne EUR vrstice).
+  //    naveden samo kot opisno besedilo (brez lastne EUR vrstice), ali ko model
+  //    spregleda nekatere vrstice pri dolgih PDF-jih z več pozicijami.
+  const pozicijeZKnauf = pozicije.filter(p => p.knauf_tm > 0);
+  const knaufTmSkupaj = Math.round(pozicijeZKnauf.reduce((s, p) => s + (p.knauf_tm || 0), 0) * 1000) / 1000;
+
   if (data.tip === 'prenova' && (data.knauf_bruto_skupaj == null || data.knauf_bruto_skupaj === 0)) {
     warnings.push(
       '⚠️ <strong>KNAUF znesek je 0 ali manjka</strong> (knauf_bruto_skupaj). ' +
       'Pri prenova-tipu naročilih KNAUF pogosto NI ločena vrstica v ponudbi, ampak je vključen v ceno ' +
-      'posameznih oken (besedilo "KNAUF -zapora špalet..." brez lastne EUR cene). ' +
-      'Preveri PDF ročno — če se beseda "KNAUF" pojavi kjerkoli, mora biti vštet v osnovo stran 1 obračuna. ' +
+      'posameznih oken (besedilo "KNAUF -zapora špalet..." brez lastne EUR cene), ali pa ima SVOJO EUR vrstico, ' +
+      'ki jo je model spregledal. <strong>Preveri PDF ročno</strong> — preštej VSE pojavitve besede "KNAUF" v ' +
+      'celotnem dokumentu (lahko jih je 10+, raztresene čez več strani) in primerjaj s tem, kar je aplikacija zaznala. ' +
       'Po potrebi popravi "knauf_bruto_skupaj" ročno ali ponovi ekstrakcijo.'
+    );
+  } else if (data.tip === 'prenova' && data.knauf_bruto_skupaj > 0) {
+    // Dodatna info — koliko pozicij in koliko tm je bilo zaznanih, da Boris lahko hitro navzkrižno preveri s PDF
+    warnings.push(
+      `ℹ️ KNAUF zaznan na <strong>${pozicijeZKnauf.length} pozicijah</strong> ` +
+      `(skupaj ${knaufTmSkupaj.toLocaleString('sl-SI',{minimumFractionDigits:3,maximumFractionDigits:3})} tm, ` +
+      `bruto ${data.knauf_bruto_skupaj.toLocaleString('sl-SI',{minimumFractionDigits:2,maximumFractionDigits:2})} EUR). ` +
+      `Priporočamo hiter navzkrižni pregled s PDF — preštej koliko vrstic z besedo "KNAUF" je dejansko v ponudbi ` +
+      `in primerjaj s tem številom pozicij (opomba: ena pozicija lahko ima 2 KNAUF vrstici hkrati, zato je skupno ` +
+      `število vrstic lahko večje od ${pozicijeZKnauf.length}).`
     );
   }
 
