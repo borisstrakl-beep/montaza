@@ -670,6 +670,7 @@ async function extractData() {
     state.extracted = data;
     hideEl('extract-status');
     renderPreview(data);
+    renderWarnings(data);
     showEl('preview-data');
   } catch (e) {
     document.getElementById('extract-status').className = 'status-box error';
@@ -750,9 +751,11 @@ Primer Test A (NE velja za montažo): vsota_pozicij=60.702,98, popusti vzporedno
 - "odvoz_bruto": vrednost postavke "odvoz" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null
 
 KLJUČNO — KNAUF ("knauf_bruto_skupaj" za stran 1, "knauf_tm" po pozicijah za stran 2):
+⚠️ KNAUF NIKOLI ne sme manjkati, če se v PDF-ju POJAVLJA ČEPRAV LE ENKRAT besedilo "KNAUF". To je ena izmed najpogostejših napak — preveri PRED oddajo odgovora, da si preštel/-a VSAKO pojavitev besede "KNAUF" v celotnem PDF-ju in da je vsaka všteta v "knauf_bruto_skupaj".
+
 KNAUF se v ponudbah M SORA pojavlja na DVA NAČINA:
-(A) Kot LOČENA postavka s svojo ceno (npr. "KNAUF -zapora špalet do 200mm ... skupaj: 134,30 EUR") → za "knauf_bruto_skupaj" uporabi ta naveden znesek direktno.
-(B) Kot OPISNO besedilo ZNOTRAJ cene pozicije okna, BREZ svoje vidne EUR vrstice (znesek je vključen v skupno ceno okna, a ga je treba rekonstruirati po formuli glede na točno besedilo).
+(A) Kot LOČENA postavka s svojo ceno (npr. "KNAUF -zapora špalet do 200mm ... skupaj: 134,30 EUR") → za "knauf_bruto_skupaj" uporabi ta naveden znesek direktno. PRIORITETA: če je dejanski EUR znesek v ponudbi naveden, ta znesek VEDNO zmaga nad spodnjo formulo — formule iz točke (B) se NIKOLI ne uporabi, če je dejanski znesek na voljo, tudi če bi formula dala drugačen rezultat.
+(B) Kot OPISNO besedilo ZNOTRAJ cene pozicije okna, BREZ svoje vidne EUR vrstice (znesek je vključen v skupno ceno okna, a ga je treba rekonstruirati po formuli glede na točno besedilo). To je POGOST primer in NE pomeni, da KNAUF ne obstaja — še vedno ga MORAŠ rekonstruirati in vključiti v "knauf_bruto_skupaj".
 
 Za OBA primera (A in B) moraš za vsako pozicijo z KNAUF izračunati tudi KOLIČINO (polje "knauf_tm" na tej poziciji v JSON-u) po naslednjih formulah glede na točno besedilo (širina/višina v metrih, iz mer pozicije):
    • "KNAUF -zapora rolete+izolacija do 300mm" → količina = širina elementa (m); bruto znesek (za tip B) = 46 × količina
@@ -760,10 +763,10 @@ Za OBA primera (A in B) moraš za vsako pozicijo z KNAUF izračunati tudi KOLIČ
    • "KNAUF -zapora špalet do 150mm 2x pokončno 1x prečno" ali "do 200mm 2x pokončno 1x prečno" → količina = (2 × višina + 1 × širina) (m); bruto znesek (za tip B) = 34 × količina
    • "KNAUF -zapora police do 200mm" → količina = širina elementa (m); bruto znesek (za tip B) = 19,60 × količina
 
-Pri sestavljenih pozicijah uporabi širino/višino CELOTNE konstrukcije (skupne mere iz "Mera:"), razen če gre za že razdeljene Panoramic segmente (glej pravilo o segmentaciji spodaj) — v tem primeru uporabi mere ustreznega segmenta.
+Pri sestavljenih pozicijah uporabi širino/višino CELOTNE konstrukcije (skupne mere iz "Mera:"), razen če gre za že razdeljene Panoramic segmente (glej pravilo o segmentaciji spodaj) — v tem primeru uporabi mere ustreznega segmenta. Izjema: če je pri sestavljeni poziciji brez Panoramic en del KNAUF besedila očitno vezan samo na EN del konstrukcije (npr. "zapora police" navaja samo širino enega okna, ne celotne konstrukcije), in dejanski naveden EUR znesek (tip A) tega potrjuje, uporabi to ožjo širino namesto celotne — vendar SAMO če je razviden iz konteksta/zneska, sicer privzemi celotno konstrukcijo.
 Ena pozicija lahko ima VEČ KNAUF vrstic hkrati (npr. tip A in tip B, ali dve različni formuli) — količine ("knauf_tm") SEŠTEJ v eno skupno število za to pozicijo, prav tako bruto zneske za "knauf_bruto_skupaj".
 Če pozicija nima nobene KNAUF omembe, je "knauf_tm": 0 za to pozicijo.
-"knauf_bruto_skupaj" (na vrhu JSON-a) = vsota vseh KNAUF bruto zneskov (tip A direktno iz ponudbe + tip B rekonstruirano) čez vse pozicije. Če v PDF-ju ni NOBENE KNAUF omembe, je "knauf_bruto_skupaj": null.
+"knauf_bruto_skupaj" (na vrhu JSON-a) = vsota vseh KNAUF bruto zneskov (tip A direktno iz ponudbe + tip B rekonstruirano) čez vse pozicije. SAMO če v CELOTNEM PDF-ju ni ČISTO NOBENE besede "KNAUF" nikjer, je "knauf_bruto_skupaj": null — sicer je to polje VEDNO številka večja od 0.
 
 Primer (N260113): poz.1 "rolete+izolacija do 300mm", širina 1,140m → knauf_tm=1.140, bruto=46×1,140=52,44; poz.4 (sestavljena, mera 2140mm) ima DVE vrstici "rolete+izolacija do 300mm" (knauf_tm=2.140, bruto=98,44) IN "zapora police do 200mm" (knauf_tm=2.140, bruto=41,94) → za poz.4: knauf_tm=2.140+2.140=4.280, bruto=140,38.
 
@@ -842,8 +845,48 @@ function renderPreview(data) {
 }
 
 // ─────────────────────────────────────────────────────────
-// GENERIRANJE OBRAČUNA (korak 4)
+// VALIDACIJSKA OPOZORILA (po ekstrakciji) — opozori na pogoste napake,
+// da jih vodja montaže lahko ročno preveri v PDF, preden generira obračun.
 // ─────────────────────────────────────────────────────────
+function renderWarnings(data) {
+  const warnings = [];
+
+  // 1) KNAUF manjka popolnoma — pogosta napaka ekstrakcije, ko je KNAUF
+  //    naveden samo kot opisno besedilo (brez lastne EUR vrstice).
+  if (data.tip === 'prenova' && (data.knauf_bruto_skupaj == null || data.knauf_bruto_skupaj === 0)) {
+    warnings.push(
+      '⚠️ <strong>KNAUF znesek je 0 ali manjka</strong> (knauf_bruto_skupaj). ' +
+      'Pri prenova-tipu naročilih KNAUF pogosto NI ločena vrstica v ponudbi, ampak je vključen v ceno ' +
+      'posameznih oken (besedilo "KNAUF -zapora špalet..." brez lastne EUR cene). ' +
+      'Preveri PDF ročno — če se beseda "KNAUF" pojavi kjerkoli, mora biti vštet v osnovo stran 1 obračuna. ' +
+      'Po potrebi popravi "knauf_bruto_skupaj" ročno ali ponovi ekstrakcijo.'
+    );
+  }
+
+  // 2) Demontaža/odvoz obstajata, a tip ni "prenova" — nekonsistentno
+  if ((data.demontaza_bruto || data.odvoz_bruto) && data.tip !== 'prenova') {
+    warnings.push(
+      '⚠️ Demontaža ali odvoz sta navedena, vendar je tip označen kot "novogradnja". Preveri klasifikacijo.'
+    );
+  }
+
+  // 3) popust_po_montazi obstaja, vendar "velja_tudi_za_montazo" ni eksplicitno true/false
+  if (data.popust_po_montazi?.obstaja && data.popust_po_montazi.velja_tudi_za_montazo == null) {
+    warnings.push(
+      '⚠️ Popust po montaži obstaja, vendar ni jasno ali velja tudi za montažo. Preveri ročno z izračunom.'
+    );
+  }
+
+  const box = document.getElementById('preview-warnings');
+  if (warnings.length) {
+    box.innerHTML = warnings.join('<br><br>');
+    showEl('preview-warnings');
+  } else {
+    hideEl('preview-warnings');
+  }
+}
+
+
 async function generateBilling() {
   setStep(4);
   showCard('card-output');
@@ -1017,7 +1060,7 @@ async function callClaude(userPrompt, systemPrompt, attachPdf) {
   content.push({ type: 'text', text: userPrompt });
 
   const body = {
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-sonnet-4-6',
     max_tokens: 16000,
     messages: [{ role: 'user', content }]
   };
