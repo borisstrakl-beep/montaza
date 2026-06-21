@@ -706,9 +706,9 @@ OBVEZNA STRUKTURA JSON:
     "znesek_iz_ponudbe": null,
     "velja_tudi_za_montazo": null
   },
-  "demontaza_bruto": 810.00,
-  "odvoz_bruto": 780.00,
-  "knauf_bruto_skupaj": 2333.83,
+  "demontaza_bruto": null ali 810.00 — ODVISNO OD TEGA KONKRETNEGA PDF, glej pravilo spodaj,
+  "odvoz_bruto": null ali 780.00 — ODVISNO OD TEGA KONKRETNEGA PDF, NEODVISNO OD demontaza_bruto, glej pravilo spodaj,
+  "knauf_bruto_skupaj": null ali 2333.83 — ODVISNO OD TEGA KONKRETNEGA PDF, glej pravilo spodaj,
   "pozicije": [
     {
       "poz": "1",
@@ -726,12 +726,20 @@ OBVEZNA STRUKTURA JSON:
 }
 ("poz" je lahko tudi npr. "0-13a", "0-13b" pri razdeljenih sestavljenih konstrukcijah — glej pravilo spodaj.)
 
+⚠️ POMEMBNO O ZGORNJI STRUKTURI: vrednosti 810.00 / 780.00 / 2333.83 za demontaza_bruto/odvoz_bruto/knauf_bruto_skupaj so PRIMER FORMATA ŠTEVILKE, ne namig o tem, kaj naj najdeš v PDF-ju, ki ga bereš zdaj. Privzeta vrednost za vsako od teh treh polj je null. Vsako od teh polj spremeniš v številko ŠELE potem, ko v TEM PDF-ju najdeš dejansko ustrezno vrstico z EUR zneskom. Te tri postavke so med seboj POPOLNOMA NEODVISNE — vsaka se preveri posebej, prisotnost ene ne pomeni nič o drugih dveh.
+
 PRAVILA:
 
 ⚠️ KRITIČNO OPOZORILO — NE IZMIŠLJUJ PODATKOV, KI JIH V TEM KONKRETNEM PDF NI:
 Polja "demontaza_bruto" in "odvoz_bruto" MORAJO biti NULL, če v TEM PDF-ju (ki ga ravno bereš) ne najdeš dobesedne vrstice s tem nazivom in EUR zneskom. Primeri v tem promptu (npr. "demontaza_bruto": 810.00) so SAMO primeri strukture JSON-a — niso namig, kakšne vrednosti pričakovati. Vsako naročilo je popolnoma neodvisno. Če v tem PDF-ju ni vrstice "demontaža" z EUR zneskom, je "demontaza_bruto": null — tudi če so prejšnja naročila, ki si jih morda obravnaval, imela to postavko.
 
 ⚠️ DEMONTAŽA IN ODVOZ SE PREVERJATA POPOLNOMA LOČENO IN NEODVISNO — prisotnost ene NE pomeni avtomatično prisotnost druge. Nekatere ponudbe imajo SAMO demontažo, brez odvoza (ali obratno), in to je lahko eksplicitno navedeno v opisnem delu na zgodnjih straneh ponudbe (npr. besedilo "V ponudbi ni zajet odvoz starih oken/vrat na deponijo." pod tehničnimi lastnostmi) — to besedilo ima absolutno prednost. V tem primeru je "odvoz_bruto": null, TUDI ČE je demontaža prisotna in TUDI ČE so druga "prenova"-tipa naročila, ki si jih obravnaval, imela obe postavki. VEDNO preglej tudi POVZETEK POZICIJ na zadnji strani ponudbe (oštevilčene postavke tik pred "Vsota pozicij") — če tam vrstice "odvoz na deponijo" ni, odvoza v tej ponudbi ni, ne glede na vzorec prejšnjih naročil. Enako velja obratno (ne predpostavljaj, da odvoz manjka, če dejansko obstaja v povzetku).
+
+⚠️ OBVEZNA KONČNA KONTROLA ZA DEMONTAŽO/ODVOZ (naredi to KOT ZADNJI KORAK, preden oddaš JSON, ločeno od KNAUF kontrole):
+1. Pojdi na zadnjo stran ponudbe, na seznam oštevilčenih postavk tik pred vrstico "Vsota pozicij" (npr. "Pozicija: 22 ... montažni material", "Pozicija: 23 ... demontaža"). Izpiši si (samo zase, v razmišljanju) VSAKO postavko iz tega seznama z njenim nazivom in zneskom.
+2. Iz tega seznama razberi: ali obstaja postavka z nazivom natanko "demontaža" (z EUR zneskom)? Ali obstaja LOČENA postavka z nazivom natanko "odvoz na deponijo" (z EUR zneskom)? To sta DVE LOČENI vprašanji — odgovori nanju neodvisno.
+3. Dodatno preveri zgodnje strani ponudbe (tehnične lastnosti) za morebitno eksplicitno izjavo tipa "V ponudbi ni zajet odvoz..." — če taka izjava obstaja, ima prednost pred vsem drugim in odvoz_bruto je null.
+4. Šele po tem dvojnem koraku (seznam pozicij + morebitna eksplicitna izjava) zapiši končni vrednosti za "demontaza_bruto" in "odvoz_bruto" v JSON. Ne sklepaj iz tega, da je naročilo tipa "prenova" ali da je podobno prejšnjim naročilom.
 
 - "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF (po pravilu spodaj), sicer "novogradnja"
 - "vsota_pozicij": vsota vseh pozicij PRED popusti (kot piše v ponudbi)
@@ -894,6 +902,9 @@ function renderWarnings(data) {
   const alerts = [];
   if (data.tip === 'prenova' && (data.knauf_bruto_skupaj == null || data.knauf_bruto_skupaj === 0) && pozicijeZKnauf.length === 0) {
     alerts.push('preveri, ali PDF dejansko vsebuje KNAUF — ni bil zaznan');
+  }
+  if (data.demontaza_bruto > 0 && data.odvoz_bruto > 0) {
+    alerts.push('demontaža in odvoz oba zaznana — hitro preveri, da sta res oba ločeno navedena v ponudbi');
   }
   if (data.popust_po_montazi?.obstaja && data.popust_po_montazi.velja_tudi_za_montazo == null) {
     alerts.push('preveri ročno, ali popust po montaži velja tudi za montažo');
