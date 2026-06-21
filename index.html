@@ -731,6 +731,8 @@ PRAVILA:
 ⚠️ KRITIČNO OPOZORILO — NE IZMIŠLJUJ PODATKOV, KI JIH V TEM KONKRETNEM PDF NI:
 Polja "demontaza_bruto" in "odvoz_bruto" MORAJO biti NULL, če v TEM PDF-ju (ki ga ravno bereš) ne najdeš dobesedne vrstice s tem nazivom in EUR zneskom. Primeri v tem promptu (npr. "demontaza_bruto": 810.00) so SAMO primeri strukture JSON-a — niso namig, kakšne vrednosti pričakovati. Vsako naročilo je popolnoma neodvisno. Če v tem PDF-ju ni vrstice "demontaža" z EUR zneskom, je "demontaza_bruto": null — tudi če so prejšnja naročila, ki si jih morda obravnaval, imela to postavko.
 
+⚠️ DEMONTAŽA IN ODVOZ SE PREVERJATA POPOLNOMA LOČENO IN NEODVISNO — prisotnost ene NE pomeni avtomatično prisotnost druge. Nekatere ponudbe imajo SAMO demontažo, brez odvoza (ali obratno), in to je lahko eksplicitno navedeno v opisnem delu na zgodnjih straneh ponudbe (npr. besedilo "V ponudbi ni zajet odvoz starih oken/vrat na deponijo." pod tehničnimi lastnostmi) — to besedilo ima absolutno prednost. V tem primeru je "odvoz_bruto": null, TUDI ČE je demontaža prisotna in TUDI ČE so druga "prenova"-tipa naročila, ki si jih obravnaval, imela obe postavki. VEDNO preglej tudi POVZETEK POZICIJ na zadnji strani ponudbe (oštevilčene postavke tik pred "Vsota pozicij") — če tam vrstice "odvoz na deponijo" ni, odvoza v tej ponudbi ni, ne glede na vzorec prejšnjih naročil. Enako velja obratno (ne predpostavljaj, da odvoz manjka, če dejansko obstaja v povzetku).
+
 - "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF (po pravilu spodaj), sicer "novogradnja"
 - "vsota_pozicij": vsota vseh pozicij PRED popusti (kot piše v ponudbi)
 - "popusti_na_vsoto_pozicij": VSI popusti, ki se v ponudbi pojavijo PRED postavko "Montaža" (torej veljajo za okna/vrata, ne za montažo)
@@ -749,7 +751,7 @@ Primer Test B (velja tudi za montažo): vsota_pozicij=12.644,48, popusti kaskadn
 Primer Test A (NE velja za montažo): vsota_pozicij=60.702,98, popusti vzporedno 4%+2%+2% → osnova_oken po teh treh; nato avansni 3%×60.702,98(vsota_pozicij prvotna, ker so bili prejšnji trije vzporedni)=1.821,09 = znesek iz ponudbe ✓ → velja_tudi_za_montazo:false.
 - Če take popustne vrstice po montaži sploh ni, nastavi "popust_po_montazi.obstaja": false in ostala polja na null.
 - "demontaza_bruto": vrednost postavke "demontaža" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null (ne 0, ne izmišljena vrednost)
-- "odvoz_bruto": vrednost postavke "odvoz" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null
+- "odvoz_bruto": vrednost postavke "odvoz" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null. Primer (N260213): ponudba ima demontažo (420,00 EUR) IN eksplicitno besedilo "V ponudbi ni zajet odvoz starih oken/vrat na deponijo." → "demontaza_bruto": 420.00, "odvoz_bruto": null (kljub temu da je demontaža prisotna).
 
 KLJUČNO — KNAUF ("knauf_bruto_skupaj" za stran 1, "knauf_tm" po pozicijah za stran 2):
 ⚠️ KNAUF NIKOLI ne sme manjkati, če se v PDF-ju POJAVLJA ČEPRAV LE ENKRAT besedilo "KNAUF". To je ena izmed najpogostejših napak — preveri PRED oddajo odgovora, da si preštel/-a VSAKO pojavitev besede "KNAUF" v celotnem PDF-ju in da je vsaka všteta v "knauf_bruto_skupaj".
@@ -836,7 +838,7 @@ function renderPreview(data) {
       <div class="di-value ${v === '—' ? 'unset' : ''}">${v}</div>
     </div>`).join('') + `
     <div class="data-item" style="border-color:var(--green-mid);">
-      <div class="di-label">KNAUF skupaj (uredljivo — preveri s PDF!)</div>
+      <div class="di-label">KNAUF skupaj (uredljivo)</div>
       <input type="number" id="knauf-override-input" step="0.01" min="0"
         value="${data.knauf_bruto_skupaj != null ? data.knauf_bruto_skupaj : ''}"
         placeholder="0,00"
@@ -866,70 +868,45 @@ function updateKnaufOverride(value) {
   const v = parseFloat(value);
   state.extracted.knauf_bruto_skupaj = isNaN(v) ? null : v;
   renderWarnings(state.extracted);
-  const box = document.getElementById('preview-warnings');
-  const note = 'ℹ️ Ročno popravljen KNAUF znesek vpliva SAMO na stran 1 (montažni obračun). ' +
-    'Stran 2 (obračun po tm) uporablja "knauf_tm" po posameznih pozicijah, kar ročni popravek ne spremeni — ' +
-    'preveri tudi tabelo pozicij spodaj, stolpec "KNAUF (tm)", če je potreben dodaten popravek za stran 2.';
-  box.innerHTML = (box.innerHTML ? box.innerHTML + '<br><br>' : '') + note;
-  showEl('preview-warnings');
 }
 
 // ─────────────────────────────────────────────────────────
-// VALIDACIJSKA OPOZORILA (po ekstrakciji) — opozori na pogoste napake,
-// da jih vodja montaže lahko ročno preveri v PDF, preden generira obračun.
+// VALIDACIJSKA OPOZORILA (po ekstrakciji) — diskretna, minimalna.
+// Prikažemo samo status treh ključnih postavk (KNAUF / demontaža / odvoz)
+// kot kratko referenčno vrstico, plus opozorilo samo v dejansko spornih primerih.
 // ─────────────────────────────────────────────────────────
 function renderWarnings(data) {
-  const warnings = [];
   const pozicije = data.pozicije || [];
-
-  // 1) KNAUF manjka popolnoma — pogosta napaka ekstrakcije, ko je KNAUF
-  //    naveden samo kot opisno besedilo (brez lastne EUR vrstice), ali ko model
-  //    spregleda nekatere vrstice pri dolgih PDF-jih z več pozicijami.
   const pozicijeZKnauf = pozicije.filter(p => p.knauf_tm > 0);
-  const knaufTmSkupaj = Math.round(pozicijeZKnauf.reduce((s, p) => s + (p.knauf_tm || 0), 0) * 1000) / 1000;
 
-  if (data.tip === 'prenova' && (data.knauf_bruto_skupaj == null || data.knauf_bruto_skupaj === 0)) {
-    warnings.push(
-      '⚠️ <strong>KNAUF znesek je 0 ali manjka</strong> (knauf_bruto_skupaj). ' +
-      'Pri prenova-tipu naročilih KNAUF pogosto NI ločena vrstica v ponudbi, ampak je vključen v ceno ' +
-      'posameznih oken (besedilo "KNAUF -zapora špalet..." brez lastne EUR cene), ali pa ima SVOJO EUR vrstico, ' +
-      'ki jo je model spregledal. <strong>Preveri PDF ročno</strong> — preštej VSE pojavitve besede "KNAUF" v ' +
-      'celotnem dokumentu (lahko jih je 10+, raztresene čez več strani) in primerjaj s tem, kar je aplikacija zaznala. ' +
-      'Po potrebi popravi "knauf_bruto_skupaj" ročno ali ponovi ekstrakcijo.'
-    );
-  } else if (data.tip === 'prenova' && data.knauf_bruto_skupaj > 0) {
-    // Dodatna info — koliko pozicij in koliko tm je bilo zaznanih, da Boris lahko hitro navzkrižno preveri s PDF
-    warnings.push(
-      `ℹ️ KNAUF zaznan na <strong>${pozicijeZKnauf.length} pozicijah</strong> ` +
-      `(skupaj ${knaufTmSkupaj.toLocaleString('sl-SI',{minimumFractionDigits:3,maximumFractionDigits:3})} tm, ` +
-      `bruto ${data.knauf_bruto_skupaj.toLocaleString('sl-SI',{minimumFractionDigits:2,maximumFractionDigits:2})} EUR). ` +
-      `Priporočamo hiter navzkrižni pregled s PDF — preštej koliko vrstic z besedo "KNAUF" je dejansko v ponudbi ` +
-      `in primerjaj s tem številom pozicij (opomba: ena pozicija lahko ima 2 KNAUF vrstici hkrati, zato je skupno ` +
-      `število vrstic lahko večje od ${pozicijeZKnauf.length}).`
-    );
+  const statusBadge = (label, present, amount) => {
+    const color = present ? 'var(--green-mid)' : '#aaa';
+    const val = present ? fmtEur(amount) : 'ni v ponudbi';
+    return `<span style="color:${color}">${label}: ${val}</span>`;
+  };
+
+  const statusLine = [
+    statusBadge('Demontaža', data.demontaza_bruto > 0, data.demontaza_bruto),
+    statusBadge('Odvoz', data.odvoz_bruto > 0, data.odvoz_bruto),
+    statusBadge('KNAUF', data.knauf_bruto_skupaj > 0, data.knauf_bruto_skupaj)
+  ].join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+
+  const alerts = [];
+  if (data.tip === 'prenova' && (data.knauf_bruto_skupaj == null || data.knauf_bruto_skupaj === 0) && pozicijeZKnauf.length === 0) {
+    alerts.push('preveri, ali PDF dejansko vsebuje KNAUF — ni bil zaznan');
   }
-
-  // 2) Demontaža/odvoz obstajata, a tip ni "prenova" — nekonsistentno
-  if ((data.demontaza_bruto || data.odvoz_bruto) && data.tip !== 'prenova') {
-    warnings.push(
-      '⚠️ Demontaža ali odvoz sta navedena, vendar je tip označen kot "novogradnja". Preveri klasifikacijo.'
-    );
-  }
-
-  // 3) popust_po_montazi obstaja, vendar "velja_tudi_za_montazo" ni eksplicitno true/false
   if (data.popust_po_montazi?.obstaja && data.popust_po_montazi.velja_tudi_za_montazo == null) {
-    warnings.push(
-      '⚠️ Popust po montaži obstaja, vendar ni jasno ali velja tudi za montažo. Preveri ročno z izračunom.'
-    );
+    alerts.push('preveri ročno, ali popust po montaži velja tudi za montažo');
   }
 
   const box = document.getElementById('preview-warnings');
-  if (warnings.length) {
-    box.innerHTML = warnings.join('<br><br>');
-    showEl('preview-warnings');
-  } else {
-    hideEl('preview-warnings');
-  }
+  box.className = 'status-box info';
+  box.style.fontSize = '11.5px';
+  box.style.padding = '8px 12px';
+  box.style.display = 'block';
+  box.style.lineHeight = '1.6';
+  box.innerHTML = statusLine + (alerts.length ? `<br><span style="color:#a06a00">⚠ ${alerts.join(' · ')}</span>` : '');
+  showEl('preview-warnings');
 }
 
 
