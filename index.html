@@ -717,7 +717,8 @@ OBVEZNA STRUKTURA JSON:
       "visina_mm": 1130,
       "obseg_tm": 5.64,
       "zaluzija_sirina_m": 1.69,
-      "komarniki_kos": 0
+      "komarniki_kos": 0,
+      "knauf_tm": 0
     }
   ]
 }
@@ -726,9 +727,9 @@ OBVEZNA STRUKTURA JSON:
 PRAVILA:
 
 ⚠️ KRITIČNO OPOZORILO — NE IZMIŠLJUJ PODATKOV, KI JIH V TEM KONKRETNEM PDF NI:
-Polja "demontaza_bruto", "odvoz_bruto" in "knauf_bruto_skupaj" MORAJO biti NULL, če v TEM PDF-ju (ki ga ravno bereš) ne najdeš dobesedne vrstice s tem nazivom in EUR zneskom. Primeri v tem promptu (npr. "demontaza_bruto": 810.00) so SAMO primeri strukture JSON-a — niso namig, kakšne vrednosti pričakovati, in ne smejo vplivati na tvoj odgovor. Vsako naročilo je popolnoma neodvisno. Če v tem PDF-ju ni vrstice "demontaža" z EUR zneskom, je "demontaza_bruto": null — tudi če so prejšnja naročila, ki si jih morda obravnaval, imela to postavko. Enako velja za KNAUF: če v PDF-ju ni nobene vrstice z besedo "KNAUF" in EUR zneskom (npr. "KNAUF -zapora rolete+izolacija do 300mm" je samo OPISNO besedilo znotraj cene okna BREZ svoje cene — to NI ločena KNAUF postavka in se NE šteje v knauf_bruto_skupaj). KNAUF se šteje samo, če ima SVOJO ločeno vrstico s ceno (npr. "KNAUF -zapora špalet do 200mm ... skupaj: 134,30 EUR" kot ločena pozicija/podpostavka s svojim zneskom).
+Polja "demontaza_bruto" in "odvoz_bruto" MORAJO biti NULL, če v TEM PDF-ju (ki ga ravno bereš) ne najdeš dobesedne vrstice s tem nazivom in EUR zneskom. Primeri v tem promptu (npr. "demontaza_bruto": 810.00) so SAMO primeri strukture JSON-a — niso namig, kakšne vrednosti pričakovati. Vsako naročilo je popolnoma neodvisno. Če v tem PDF-ju ni vrstice "demontaža" z EUR zneskom, je "demontaza_bruto": null — tudi če so prejšnja naročila, ki si jih morda obravnaval, imela to postavko.
 
-- "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF (z lastno EUR ceno), sicer "novogradnja"
+- "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF (po pravilu spodaj), sicer "novogradnja"
 - "vsota_pozicij": vsota vseh pozicij PRED popusti (kot piše v ponudbi)
 - "popusti_na_vsoto_pozicij": VSI popusti, ki se v ponudbi pojavijo PRED postavko "Montaža" (torej veljajo za okna/vrata, ne za montažo)
 
@@ -747,7 +748,25 @@ Primer Test A (NE velja za montažo): vsota_pozicij=60.702,98, popusti vzporedno
 - Če take popustne vrstice po montaži sploh ni, nastavi "popust_po_montazi.obstaja": false in ostala polja na null.
 - "demontaza_bruto": vrednost postavke "demontaža" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null (ne 0, ne izmišljena vrednost)
 - "odvoz_bruto": vrednost postavke "odvoz" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null
-- "knauf_bruto_skupaj": seštej VSE KNAUF postavke, ki imajo svojo ločeno EUR ceno V TEM PDF — če ni nobene takšne ločene postavke (samo opisno besedilo "KNAUF -zapora..." znotraj cene okna), OBVEZNO null
+
+KLJUČNO — KNAUF ("knauf_bruto_skupaj" za stran 1, "knauf_tm" po pozicijah za stran 2):
+KNAUF se v ponudbah M SORA pojavlja na DVA NAČINA:
+(A) Kot LOČENA postavka s svojo ceno (npr. "KNAUF -zapora špalet do 200mm ... skupaj: 134,30 EUR") → za "knauf_bruto_skupaj" uporabi ta naveden znesek direktno.
+(B) Kot OPISNO besedilo ZNOTRAJ cene pozicije okna, BREZ svoje vidne EUR vrstice (znesek je vključen v skupno ceno okna, a ga je treba rekonstruirati po formuli glede na točno besedilo).
+
+Za OBA primera (A in B) moraš za vsako pozicijo z KNAUF izračunati tudi KOLIČINO (polje "knauf_tm" na tej poziciji v JSON-u) po naslednjih formulah glede na točno besedilo (širina/višina v metrih, iz mer pozicije):
+   • "KNAUF -zapora rolete+izolacija do 300mm" → količina = širina elementa (m); bruto znesek (za tip B) = 46 × količina
+   • "KNAUF -zapora špalet do 150mm 2x pokončno" ali "do 200mm 2x pokončno" → količina = 2 × višina elementa (m); bruto znesek (za tip B) = 34 × količina
+   • "KNAUF -zapora špalet do 150mm 2x pokončno 1x prečno" ali "do 200mm 2x pokončno 1x prečno" → količina = (2 × višina + 1 × širina) (m); bruto znesek (za tip B) = 34 × količina
+   • "KNAUF -zapora police do 200mm" → količina = širina elementa (m); bruto znesek (za tip B) = 19,60 × količina
+
+Pri sestavljenih pozicijah uporabi širino/višino CELOTNE konstrukcije (skupne mere iz "Mera:"), razen če gre za že razdeljene Panoramic segmente (glej pravilo o segmentaciji spodaj) — v tem primeru uporabi mere ustreznega segmenta.
+Ena pozicija lahko ima VEČ KNAUF vrstic hkrati (npr. tip A in tip B, ali dve različni formuli) — količine ("knauf_tm") SEŠTEJ v eno skupno število za to pozicijo, prav tako bruto zneske za "knauf_bruto_skupaj".
+Če pozicija nima nobene KNAUF omembe, je "knauf_tm": 0 za to pozicijo.
+"knauf_bruto_skupaj" (na vrhu JSON-a) = vsota vseh KNAUF bruto zneskov (tip A direktno iz ponudbe + tip B rekonstruirano) čez vse pozicije. Če v PDF-ju ni NOBENE KNAUF omembe, je "knauf_bruto_skupaj": null.
+
+Primer (N260113): poz.1 "rolete+izolacija do 300mm", širina 1,140m → knauf_tm=1.140, bruto=46×1,140=52,44; poz.4 (sestavljena, mera 2140mm) ima DVE vrstici "rolete+izolacija do 300mm" (knauf_tm=2.140, bruto=98,44) IN "zapora police do 200mm" (knauf_tm=2.140, bruto=41,94) → za poz.4: knauf_tm=2.140+2.140=4.280, bruto=140,38.
+
 - Za "tip_montaze": RAL = standardno okno, HST = dvižno-drsna stena, fiksna = fiksna zasteklitev/Panoramic brez premičnega krila, vhod = vhodna vrata z obsvetlobo
 - "obseg_tm" = 2*(sirina_m + visina_m), zaokroženo na 3 decimale
 - "zaluzija_sirina_m": širina žaluzije v metrih (NULL če ni)
@@ -934,6 +953,7 @@ function buildGenerationPrompt() {
   let zalSirina = 0, komarnikosKos = 0;
   let demTm = 0; // skupni obseg za dem/odvoz/knauf na stran 2
 
+  let knaufTm = 0;
   pozicije.forEach(p => {
     const tm = p.obseg_tm || 0;
     if (p.tip_montaze === 'RAL') ralTm += tm;
@@ -942,9 +962,11 @@ function buildGenerationPrompt() {
     else if (p.tip_montaze === 'vhod') vhodTm += tm;
     if (p.zaluzija_sirina_m) zalSirina += p.zaluzija_sirina_m;
     if (p.komarniki_kos) komarnikosKos += p.komarniki_kos;
+    if (p.knauf_tm) knaufTm += p.knauf_tm;
   });
+  knaufTm = Math.round(knaufTm * 1000) / 1000;
 
-  // Skupni obseg za dem/odvoz/knauf (RAL+HST+fiksna+vhod)
+  // Skupni obseg za dem/odvoz (RAL+HST+fiksna+vhod) — KNAUF ima svojo ločeno količino (knaufTm)
   const skupajTm = Math.round((ralTm+hstTm+fiksnaTm+vhodTm)*1000)/1000;
 
   const ralEur = Math.round(ralTm*22*100)/100;
@@ -957,15 +979,17 @@ function buildGenerationPrompt() {
   if (d.tip === 'prenova') {
     demEur2 = Math.round(skupajTm*8*100)/100;
     odvozEur2 = Math.round(skupajTm*6*100)/100;
-    knaufEur2 = Math.round(skupajTm*25*100)/100;
   }
+  // KNAUF se obračuna SAMO na podlagi dejanske KNAUF količine (knaufTm), ne celotnega obsega oken
+  knaufEur2 = Math.round(knaufTm*25*100)/100;
+
   const subtotal2 = Math.round((ralEur+hstEur+fiksnaEur+vhodEur+zalEur+komEur+demEur2+odvozEur2+knaufEur2)*100)/100;
   const final2 = Math.round((subtotal2+kmZnesek)*100)/100;
   const m65_2 = Math.round(subtotal2*0.65*100)/100;
   const monterja2 = Math.round((m65_2+kmZnesek)*100)/100;
 
   const stran2 = {
-    pozicije, ralTm, hstTm, fiksnaTm, vhodTm, skupajTm,
+    pozicije, ralTm, hstTm, fiksnaTm, vhodTm, skupajTm, knaufTm,
     ralEur, hstEur, fiksnaEur, vhodEur, zalEur, zalSirina,
     komEur, komarnikosKos,
     demEur2, odvozEur2, knaufEur2,
@@ -1198,7 +1222,7 @@ function buildKompletHtml(d, s1, s2) {
     <tr><th style="${thStyle}">Vrsta dela</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${s2.demEur2 ? `<tr><td style="${tdStyle}">Demontaža starih oken</td><td style="${tdNum}">${ft(s2.skupajTm)}</td><td style="${tdNum}">8,00</td><td style="${tdNum}">${f(s2.demEur2)}</td></tr>`:''}
     ${s2.odvozEur2 ? `<tr style="background:#f5f7f5"><td style="${tdStyle}">Odvoz materiala na deponijo</td><td style="${tdNum}">${ft(s2.skupajTm)}</td><td style="${tdNum}">6,00</td><td style="${tdNum}">${f(s2.odvozEur2)}</td></tr>`:''}
-    ${s2.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF špalet (brez pleskanja)</td><td style="${tdNum}">${ft(s2.skupajTm)}</td><td style="${tdNum}">25,00</td><td style="${tdNum}">${f(s2.knaufEur2)}</td></tr>`:''}
+    ${s2.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF (po pozicijah z KNAUF)</td><td style="${tdNum}">${ft(s2.knaufTm)}</td><td style="${tdNum}">25,00</td><td style="${tdNum}">${f(s2.knaufEur2)}</td></tr>`:''}
   </table>` : '';
 
   function sec(n, title, show, content) {
@@ -1473,7 +1497,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
     <tr><th style="${thStyle}">Vrsta dela</th><th style="${thStyle};text-align:right">Obseg tm</th><th style="${thStyle};text-align:right">Cena/tm</th><th style="${thStyle};text-align:right">Znesek</th></tr>
     ${s.demEur2 ? `<tr><td style="${tdStyle}">Demontaža starih oken</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">5,20</td><td style="${tdNum}">${f(demM)}</td></tr>`:''}
     ${s.odvozEur2 ? `<tr style="background:#f5f7f5"><td style="${tdStyle}">Odvoz materiala na deponijo</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">3,90</td><td style="${tdNum}">${f(odvozM)}</td></tr>`:''}
-    ${s.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF špalet (brez pleskanja)</td><td style="${tdNum}">${ft(s.skupajTm)}</td><td style="${tdNum}">16,25</td><td style="${tdNum}">${f(knaufM)}</td></tr>`:''}
+    ${s.knaufEur2 ? `<tr><td style="${tdStyle}">KNAUF (po pozicijah z KNAUF)</td><td style="${tdNum}">${ft(s.knaufTm)}</td><td style="${tdNum}">16,25</td><td style="${tdNum}">${f(knaufM)}</td></tr>`:''}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj demontaža / odvoz / KNAUF</td><td style="${tdNum}font-weight:700;">${f(demM+odvozM+knaufM)}</td></tr>
   </table>` : '';
 
