@@ -1053,8 +1053,13 @@ function buildGenerationPrompt() {
   const zalEur = Math.round(zalSirina*22*100)/100;
   const komEur = komarnikosKos * 12;
   let demEur2 = 0, odvozEur2 = 0, knaufEur2 = 0;
-  if (d.tip === 'prenova') {
+  // KRITIČNO: demontaža in odvoz na strani 2 se računata SAMO če sta dejansko prisotna
+  // v ekstrahiranih podatkih (d.demontaza_bruto / d.odvoz_bruto), NE na podlagi splošnega
+  // tipa "prenova" — naročilo je lahko prenova z demontažo, a brez odvoza (ali obratno).
+  if (d.demontaza_bruto) {
     demEur2 = Math.round(skupajTm*8*100)/100;
+  }
+  if (d.odvoz_bruto) {
     odvozEur2 = Math.round(skupajTm*6*100)/100;
   }
   // KNAUF se obračuna SAMO na podlagi dejanske KNAUF količine (knaufTm), ne celotnega obsega oken
