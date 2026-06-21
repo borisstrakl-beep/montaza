@@ -2,6 +2,9 @@
 <html lang="sl">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>M SORA — Obračun montaže</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏗️</text></svg>">
@@ -543,6 +546,23 @@ function handlePdfUpload(event) {
     alert('Prosim naloži PDF datoteko.');
     return;
   }
+
+  // KRITIČNO: popolnoma počisti stanje prejšnjega naročila preden začnemo novo,
+  // da podatki (npr. KNAUF/demontaža/odvoz) iz prejšnjega PDF-ja ne "uhajajo" v nov obračun.
+  state = {
+    pdfBase64: null, pdfName: null, kmEnosmerno: null,
+    extracted: null, outputHtml: null, stran1data: null, stran2data: null
+  };
+  document.getElementById('km-input').value = '';
+  document.getElementById('data-grid').innerHTML = '';
+  document.getElementById('positions-tbody').innerHTML = '';
+  hideEl('card-distance');
+  hideEl('card-preview');
+  hideEl('card-output');
+  hideEl('preview-data');
+  hideEl('output-ready');
+  hideEl('google-maps-block');
+
   state.pdfName = file.name;
   document.getElementById('pdf-filename').textContent = '📄 ' + file.name;
   document.getElementById('pdf-filename').classList.remove('hidden');
@@ -704,7 +724,11 @@ OBVEZNA STRUKTURA JSON:
 ("poz" je lahko tudi npr. "0-13a", "0-13b" pri razdeljenih sestavljenih konstrukcijah — glej pravilo spodaj.)
 
 PRAVILA:
-- "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF, sicer "novogradnja"
+
+⚠️ KRITIČNO OPOZORILO — NE IZMIŠLJUJ PODATKOV, KI JIH V TEM KONKRETNEM PDF NI:
+Polja "demontaza_bruto", "odvoz_bruto" in "knauf_bruto_skupaj" MORAJO biti NULL, če v TEM PDF-ju (ki ga ravno bereš) ne najdeš dobesedne vrstice s tem nazivom in EUR zneskom. Primeri v tem promptu (npr. "demontaza_bruto": 810.00) so SAMO primeri strukture JSON-a — niso namig, kakšne vrednosti pričakovati, in ne smejo vplivati na tvoj odgovor. Vsako naročilo je popolnoma neodvisno. Če v tem PDF-ju ni vrstice "demontaža" z EUR zneskom, je "demontaza_bruto": null — tudi če so prejšnja naročila, ki si jih morda obravnaval, imela to postavko. Enako velja za KNAUF: če v PDF-ju ni nobene vrstice z besedo "KNAUF" in EUR zneskom (npr. "KNAUF -zapora rolete+izolacija do 300mm" je samo OPISNO besedilo znotraj cene okna BREZ svoje cene — to NI ločena KNAUF postavka in se NE šteje v knauf_bruto_skupaj). KNAUF se šteje samo, če ima SVOJO ločeno vrstico s ceno (npr. "KNAUF -zapora špalet do 200mm ... skupaj: 134,30 EUR" kot ločena pozicija/podpostavka s svojim zneskom).
+
+- "tip" = "prenova" če obstajajo postavke demontaža/odvoz/KNAUF (z lastno EUR ceno), sicer "novogradnja"
 - "vsota_pozicij": vsota vseh pozicij PRED popusti (kot piše v ponudbi)
 - "popusti_na_vsoto_pozicij": VSI popusti, ki se v ponudbi pojavijo PRED postavko "Montaža" (torej veljajo za okna/vrata, ne za montažo)
 
@@ -721,9 +745,9 @@ KLJUČNO — POPUST KI SLEDI MONTAŽI (polje "popust_po_montazi"):
 Primer Test B (velja tudi za montažo): vsota_pozicij=12.644,48, popusti kaskadno 2%+2%+3% → osnova_oken=11.779,45; montaža=1.517,34; (11.779,45+1.517,34)×3%=398,90 = znesek iz ponudbe ✓ → velja_tudi_za_montazo:true.
 Primer Test A (NE velja za montažo): vsota_pozicij=60.702,98, popusti vzporedno 4%+2%+2% → osnova_oken po teh treh; nato avansni 3%×60.702,98(vsota_pozicij prvotna, ker so bili prejšnji trije vzporedni)=1.821,09 = znesek iz ponudbe ✓ → velja_tudi_za_montazo:false.
 - Če take popustne vrstice po montaži sploh ni, nastavi "popust_po_montazi.obstaja": false in ostala polja na null.
-- "demontaza_bruto": vrednost postavke "demontaža" (NULL če ni)
-- "odvoz_bruto": vrednost postavke "odvoz" (NULL če ni)  
-- "knauf_bruto_skupaj": seštej VSE KNAUF postavke (NULL če jih ni)
+- "demontaza_bruto": vrednost postavke "demontaža" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null (ne 0, ne izmišljena vrednost)
+- "odvoz_bruto": vrednost postavke "odvoz" KOT JE V TEM PDF — če take vrstice z EUR zneskom ni, OBVEZNO null
+- "knauf_bruto_skupaj": seštej VSE KNAUF postavke, ki imajo svojo ločeno EUR ceno V TEM PDF — če ni nobene takšne ločene postavke (samo opisno besedilo "KNAUF -zapora..." znotraj cene okna), OBVEZNO null
 - Za "tip_montaze": RAL = standardno okno, HST = dvižno-drsna stena, fiksna = fiksna zasteklitev/Panoramic brez premičnega krila, vhod = vhodna vrata z obsvetlobo
 - "obseg_tm" = 2*(sirina_m + visina_m), zaokroženo na 3 decimale
 - "zaluzija_sirina_m": širina žaluzije v metrih (NULL če ni)
@@ -1045,29 +1069,42 @@ function buildKompletHtml(d, s1, s2) {
         <td class="right">+ ${f(s1.montazaBruto)}</td>
       </tr>`;
 
-    stran1Rows = `
+    const knaufVrstica = s1.knaufBruto ? `
       <tr>
         <td class="left">KNAUF (vsota KNAUF postavk) — bruto</td>
         <td class="base">${f(s1.knaufBruto)}</td>
         <td class="right">${f(s1.knaufBruto)}</td>
-      </tr>
+      </tr>` : '';
+    const demVrstica = s1.demBruto ? `
       <tr>
         <td class="left">Demontaža — bruto</td>
         <td class="base">${f(s1.demBruto)}</td>
         <td class="right">${f(s1.demBruto)}</td>
-      </tr>
+      </tr>` : '';
+    const odvozVrstica = s1.odvozBruto ? `
       <tr>
         <td class="left">Odvoz na deponijo — bruto</td>
         <td class="base">${f(s1.odvozBruto)}</td>
         <td class="right">${f(s1.odvozBruto)}</td>
-      </tr>
+      </tr>` : '';
+
+    // Naziv vmesne vrstice prilagojen glede na to, katere postavke dejansko obstajajo
+    const obstojeceKategorije = [];
+    if (s1.knaufBruto) obstojeceKategorije.push('KNAUF');
+    if (s1.demBruto) obstojeceKategorije.push('demontaža');
+    if (s1.odvozBruto) obstojeceKategorije.push('odvoz');
+    const nazivOsnove = obstojeceKategorije.length
+      ? obstojeceKategorije.join(' + ') + ' neto'
+      : 'Osnova neto';
+
+    stran1Rows = `${knaufVrstica}${demVrstica}${odvozVrstica}
       <tr class="discount">
         <td class="left">− Popust na vsoto pozicij (${s1.popustOpis || '—'})</td>
         <td class="base">faktor ${s1.efFaktor}</td>
         <td class="right">− ${f(Math.round(((s1.knaufBruto||0)+(s1.demBruto||0)+(s1.odvozBruto||0))*(1-s1.efFaktor)*100)/100)}</td>
       </tr>${popustPoMontaziVrstica}
       <tr class="mid">
-        <td class="left">KNAUF + demontaža + odvoz neto</td>
+        <td class="left">${nazivOsnove}</td>
         <td class="base">—</td>
         <td class="right">${f(s1.osnova)}</td>
       </tr>${montazaVrstica}
