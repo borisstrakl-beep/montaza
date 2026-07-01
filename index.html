@@ -1008,7 +1008,7 @@ function buildGenerationPrompt() {
     const osnova = Math.round((knaufNeto + demNeto + odvozNeto) * 100) / 100;
     const skupajNeto = Math.round((osnova + montazaNeto) * 100) / 100;
     const final1 = Math.round((skupajNeto + kmZnesek) * 100) / 100;
-    const m65 = Math.round(skupajNeto * 0.65 * 100) / 100;
+    const m65 = Math.round(skupajNeto * 0.60 * 100) / 100;
     const monterja = Math.round((m65 + kmZnesek) * 100) / 100;
     stran1 = { tip:'prenova', knaufBruto:d.knauf_bruto_skupaj, demBruto:d.demontaza_bruto, odvozBruto:d.odvoz_bruto,
       efFaktor, popustOpis, montazaPopustOpis, montazaPopustZnesek, knaufNeto, demNeto, odvozNeto, osnova,
@@ -1016,7 +1016,7 @@ function buildGenerationPrompt() {
   } else {
     // Novogradnja: osnova je SAMO montaža; popust-po-montazi (če obstaja) vpliva nanjo neposredno
     const final1 = Math.round((montazaNeto + kmZnesek) * 100) / 100;
-    const m65 = Math.round(montazaNeto * 0.65 * 100) / 100;
+    const m65 = Math.round(montazaNeto * 0.60 * 100) / 100;
     const monterja = Math.round((m65 + kmZnesek) * 100) / 100;
     stran1 = { tip:'novogradnja', montazaBruto,
       montazaPopustPct: popustPoMontazi.obstaja ? popustPoMontazi.procent : null,
@@ -1067,7 +1067,7 @@ function buildGenerationPrompt() {
 
   const subtotal2 = Math.round((ralEur+hstEur+fiksnaEur+vhodEur+zalEur+komEur+demEur2+odvozEur2+knaufEur2)*100)/100;
   const final2 = Math.round((subtotal2+kmZnesek)*100)/100;
-  const m65_2 = Math.round(subtotal2*0.65*100)/100;
+  const m65_2 = Math.round(subtotal2*0.60*100)/100;
   const monterja2 = Math.round((m65_2+kmZnesek)*100)/100;
 
   const stran2 = {
@@ -1230,7 +1230,7 @@ function buildKompletHtml(d, s1, s2) {
         <td class="right">${f(s1.final1)}</td>
       </tr>
       <tr class="monterja">
-        <td class="left">Od tega za monterja (65&nbsp;% montaže + km)</td>
+        <td class="left">Od tega za monterja (60&nbsp;% montaže + km)</td>
         <td class="base">${f(s1.m65)} + ${f(s1.kmZnesek)}</td>
         <td class="right">${f(s1.monterja)}</td>
       </tr>`;
@@ -1263,7 +1263,7 @@ function buildKompletHtml(d, s1, s2) {
         <td class="right">${f(s1.final1)}</td>
       </tr>
       <tr class="monterja">
-        <td class="left">Od tega za monterja (65&nbsp;% montaže + km)</td>
+        <td class="left">Od tega za monterja (60&nbsp;% montaže + km)</td>
         <td class="base">${f(s1.m65)} + ${f(s1.kmZnesek)}</td>
         <td class="right">${f(s1.monterja)}</td>
       </tr>`;
@@ -1433,7 +1433,7 @@ function buildKompletHtml(d, s1, s2) {
         <tr class="mid"><td>Skupaj (brez km)</td><td class="num">${f(s2.subtotal2)}</td></tr>
         <tr class="km"><td>+ Kilometrina (100&nbsp;% monterju)</td><td class="num">+ ${f(s2.kmZnesek)}</td></tr>
         <tr class="final"><td>Skupaj neto</td><td class="num">${f(s2.final2)}</td></tr>
-        <tr class="monterja"><td>Vrednost za monterja (65&nbsp;% + km)</td><td class="num">${f(s2.m65_2)} + ${f(s2.kmZnesek)} = ${f(s2.monterja2)}</td></tr>
+        <tr class="monterja"><td>Vrednost za monterja (60&nbsp;% + km)</td><td class="num">${f(s2.m65_2)} + ${f(s2.kmZnesek)} = ${f(s2.monterja2)}</td></tr>
       </table>
     </div>
   </div>
@@ -1449,21 +1449,21 @@ function buildKompletHtml(d, s1, s2) {
 
 function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
   // s2data vsebuje vse vrednosti za stran 2
-  // Monterjev izpis: isto oblikovanje, zneski × 0.65, km ostane 100%
+  // Monterjev izpis: isto oblikovanje, zneski × 0.60, km ostane 100%
   const s = s2data;
   const f = (n) => n.toLocaleString('sl-SI', {minimumFractionDigits:2,maximumFractionDigits:2}) + ' EUR';
   const ft = (n) => n.toLocaleString('sl-SI', {minimumFractionDigits:3,maximumFractionDigits:3});
 
   // Delež monterja za vsako kategorijo (interni izračun, ni prikazan v izpisu)
-  const ralM    = Math.round(s.ralEur    * 0.65 * 100)/100;
-  const hstM    = Math.round(s.hstEur    * 0.65 * 100)/100;
-  const fiksnaM = Math.round(s.fiksnaEur * 0.65 * 100)/100;
-  const vhodM   = Math.round(s.vhodEur   * 0.65 * 100)/100;
-  const zalM    = Math.round(s.zalEur    * 0.65 * 100)/100;
-  const komM    = Math.round(s.komEur    * 0.65 * 100)/100;
-  const demM    = Math.round(s.demEur2   * 0.65 * 100)/100;
-  const odvozM  = Math.round(s.odvozEur2 * 0.65 * 100)/100;
-  const knaufM  = Math.round(s.knaufEur2 * 0.65 * 100)/100;
+  const ralM    = Math.round(s.ralEur    * 0.60 * 100)/100;
+  const hstM    = Math.round(s.hstEur    * 0.60 * 100)/100;
+  const fiksnaM = Math.round(s.fiksnaEur * 0.60 * 100)/100;
+  const vhodM   = Math.round(s.vhodEur   * 0.60 * 100)/100;
+  const zalM    = Math.round(s.zalEur    * 0.60 * 100)/100;
+  const komM    = Math.round(s.komEur    * 0.60 * 100)/100;
+  const demM    = Math.round(s.demEur2   * 0.60 * 100)/100;
+  const odvozM  = Math.round(s.odvozEur2 * 0.60 * 100)/100;
+  const knaufM  = Math.round(s.knaufEur2 * 0.60 * 100)/100;
   const subtotalM = Math.round((ralM+hstM+fiksnaM+vhodM+zalM+komM+demM+odvozM+knaufM)*100)/100;
   const km = s.kmZnesek; // 100% monterju
   const finalM = Math.round((subtotalM + km)*100)/100;
@@ -1515,7 +1515,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
       <td style="${tdNum}">14,30</td>
-      <td style="${tdNum}">${f(Math.round(p.obseg_tm*22*0.65*100)/100)}</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*22*0.60*100)/100)}</td>
     </tr>`).join('')}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj RAL</td><td style="${tdNum}font-weight:700;">${ft(s.ralTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(ralM)}</td></tr>
   </table>` : '';
@@ -1526,7 +1526,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
       <td style="${tdNum}">18,20</td>
-      <td style="${tdNum}">${f(Math.round(p.obseg_tm*28*0.65*100)/100)}</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*28*0.60*100)/100)}</td>
     </tr>`).join('')}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj HST</td><td style="${tdNum}font-weight:700;">${ft(s.hstTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(hstM)}</td></tr>
   </table>` : '';
@@ -1537,7 +1537,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
       <td style="${tdNum}">22,75</td>
-      <td style="${tdNum}">${f(Math.round(p.obseg_tm*35*0.65*100)/100)}</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*35*0.60*100)/100)}</td>
     </tr>`).join('')}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj fiksne zasteklitve</td><td style="${tdNum}font-weight:700;">${ft(s.fiksnaTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(fiksnaM)}</td></tr>
   </table>` : '';
@@ -1548,7 +1548,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${ft(p.obseg_tm)}</td>
       <td style="${tdNum}">16,25</td>
-      <td style="${tdNum}">${f(Math.round(p.obseg_tm*25*0.65*100)/100)}</td>
+      <td style="${tdNum}">${f(Math.round(p.obseg_tm*25*0.60*100)/100)}</td>
     </tr>`).join('')}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj vhodna vrata</td><td style="${tdNum}font-weight:700;">${ft(s.vhodTm)}</td><td></td><td style="${tdNum}font-weight:700;">${f(vhodM)}</td></tr>
   </table>` : '';
@@ -1559,7 +1559,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${p.zaluzija_sirina_m}</td>
       <td style="${tdNum}">14,30</td>
-      <td style="${tdNum}">${f(Math.round(p.zaluzija_sirina_m*22*0.65*100)/100)}</td>
+      <td style="${tdNum}">${f(Math.round(p.zaluzija_sirina_m*22*0.60*100)/100)}</td>
     </tr>`).join('')}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj žaluzije</td><td style="${tdNum}font-weight:700;">${s.zalSirina.toFixed(3)} m</td><td></td><td style="${tdNum}font-weight:700;">${f(zalM)}</td></tr>
   </table>` : '';
@@ -1570,7 +1570,7 @@ function buildMonterHtml(s2data, narocilo, stranka, naslov, svetovalec, datum) {
       <td style="${tdStyle}">${p.poz}</td><td style="${tdStyle}">${p.lokacija||''}</td><td style="${tdStyle}">${p.element||''}</td>
       <td style="${tdNum}">${p.komarniki_kos}</td>
       <td style="${tdNum}">7,80</td>
-      <td style="${tdNum}">${f(Math.round(p.komarniki_kos*12*0.65*100)/100)}</td>
+      <td style="${tdNum}">${f(Math.round(p.komarniki_kos*12*0.60*100)/100)}</td>
     </tr>`).join('')}
     <tr style="${trSub}"><td colspan="3" style="${tdStyle}font-weight:700;">Skupaj komarniki</td><td style="${tdNum}font-weight:700;">${s.komarnikosKos}</td><td></td><td style="${tdNum}font-weight:700;">${f(komM)}</td></tr>
   </table>` : '';
